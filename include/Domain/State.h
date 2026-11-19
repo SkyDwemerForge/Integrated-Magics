@@ -37,6 +37,11 @@ namespace IntegratedMagic {
         bool holdFiredAndWaitingCastStop{false};
         bool finished{false};
         bool pendingRestartNextFrame{false};
+        bool needsManualFireInKReady{false};
+        // Skip Channeling forced this hand's charge in the current attempt (reset per attempt).
+        bool chargeSkipped{false};
+        // Skip Channeling: charge cost the game did not drain; paid when the spell fires (reset with chargeSkipped).
+        float skipMagickaOwed{0.f};
         float startRequestSecs{0.f};
         float castingElapsedSecs{0.f};
         bool waitingSpellFireFinalize{false};
@@ -74,7 +79,7 @@ namespace IntegratedMagic {
         float pendingPowerRestoreDelaySecs{0.f};
         static constexpr float kPowerRestoreDelaySec = 0.05f;
         float sheatheWaitSecs{0.f};
-        static constexpr float kSheatheWaitTimeoutSec = 1.0f;
+        static constexpr float kSheatheWaitTimeoutSec = 3.0f;
 
         void ClearDirty() { dirtyLeft = dirtyRight = dirtyShout = false; }
         void ClearPending() { pendingRestore = pendingRestoreAfterSheathe = pendingPowerRestore = false; }

@@ -72,6 +72,15 @@ namespace Application {
 
             const auto autoResult = IntegratedMagic::MagicState::Get().PumpAutomatic(dt);
 
+            if (autoResult.forceChargeLeft || autoResult.forceChargeRight) {
+                if (auto* pc = RE::PlayerCharacter::GetSingleton()) {
+                    if (autoResult.forceChargeLeft)
+                        IntegratedMagic::MagicAction::ForceChargeComplete(pc, IntegratedMagic::Hand::Left);
+                    if (autoResult.forceChargeRight)
+                        IntegratedMagic::MagicAction::ForceChargeComplete(pc, IntegratedMagic::Hand::Right);
+                }
+            }
+
             if (autoResult.releaseLeftAttack) {
                 MAGIC_DEBUG_LOG("[FLOW] OnFrame: release Left (UP only, DOWN next frame)");
                 IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Left, 0.0f, 0.1f);
@@ -137,7 +146,10 @@ namespace Application {
             if (action.needsSkipEquipVars) {
                 IntegratedMagic::MagicAction::ResetSkipEquipToken();
                 IntegratedMagic::MagicAction::SetSkipEquipVars(player, true);
-                player->DrawWeaponMagicHands(true);
+                const bool hasRightSpell = std::any_of(
+                    action.spellsToEquip.begin(), action.spellsToEquip.end(),
+                    [](const IntegratedMagic::EquipIntent& i) { return i.hand == IntegratedMagic::Hand::Right; });
+                if (hasRightSpell) player->DrawWeaponMagicHands(true);
             }
 
             for (auto& intent : action.spellsToEquip) {
@@ -218,6 +230,8 @@ namespace Application {
         if (tag == "MRh_SpellFire_Event"sv) {
             const auto r = state.OnSpellFired(Right);
 
+            if (r.magickaToDrain > 0.f)
+                IntegratedMagic::MagicAction::DrainMagicka(RE::PlayerCharacter::GetSingleton(), r.magickaToDrain);
             if (r.leftAttack)
                 IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Left, 0.0f, r.leftAttack->heldSecs);
             if (r.rightAttack)
@@ -230,6 +244,8 @@ namespace Application {
         if (tag == "MLh_SpellFire_Event"sv) {
             const auto r = state.OnSpellFired(Left);
 
+            if (r.magickaToDrain > 0.f)
+                IntegratedMagic::MagicAction::DrainMagicka(RE::PlayerCharacter::GetSingleton(), r.magickaToDrain);
             if (r.leftAttack)
                 IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Left, 0.0f, r.leftAttack->heldSecs);
             if (r.rightAttack)
@@ -335,8 +351,6 @@ namespace Application {
         }
 
         if (plan.clearVoiceShout) {
-            // Major powers (kPower) have a 24h in-game cooldown. voiceRecoveryTime is 0 for powers
-            // in Skyrim SE (only set for shouts), so we compute the duration from the timescale.
             {
                 const auto& rd = player->GetActorRuntimeData();
                 if (rd.selectedPower) {
@@ -352,8 +366,8 @@ namespace Application {
                             const int n = static_cast<int>(IntegratedMagic::Slots::GetSlotCount());
                             for (int i = 0; i < n; ++i) {
                                 if (IntegratedMagic::Slots::GetSlotShout(i) == formID) {
-                                    IntegratedMagic::SlotCooldownTracker::Get().StartPowerCooldown(
-                                        i, formID, totalCooldown);
+                                    IntegratedMagic::SlotCooldownTracker::Get().StartPowerCooldown(i, formID,
+                                                                                                   totalCooldown);
                                     MAGIC_DEBUG_LOG(
                                         "[SpellSystem] StartPowerCooldown: slot={} formID={:#010x} "
                                         "totalCooldown={:.1f}s (timescale={:.1f})",

@@ -1,5 +1,4 @@
 #pragma once
-#include <cstdint>
 
 inline constexpr int kMaxCode = 400;
 inline constexpr int kMouseButtonBase = 256;

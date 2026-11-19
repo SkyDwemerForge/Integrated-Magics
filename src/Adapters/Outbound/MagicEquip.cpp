@@ -1,5 +1,6 @@
 #include "Adapters/Outbound/MagicEquip.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <thread>
@@ -170,8 +171,8 @@ namespace IntegratedMagic::MagicAction {
         } else if (auto* spell = shoutOrPower->As<RE::SpellItem>(); spell && IsPowerSpell(shoutOrPower)) {
             mgr->EquipSpell(player, spell, nullptr);
             const auto& rd = player->GetActorRuntimeData();
-            MAGIC_DEBUG_LOG("[Action] EquipShoutInVoice: power {:#010x} -> selectedPower={:#010x}",
-                            spell->GetFormID(), rd.selectedPower ? rd.selectedPower->GetFormID() : 0u);
+            MAGIC_DEBUG_LOG("[Action] EquipShoutInVoice: power {:#010x} -> selectedPower={:#010x}", spell->GetFormID(),
+                            rd.selectedPower ? rd.selectedPower->GetFormID() : 0u);
         }
     }
 
@@ -207,5 +208,27 @@ namespace IntegratedMagic::MagicAction {
         if (cur & 1uLL) {
             g_skipToken.fetch_add(1, std::memory_order_relaxed);
         }
+    }
+
+    void ForceChargeComplete(RE::PlayerCharacter* player, Hand hand) {
+        if (!player) return;
+        const auto src = (hand == Hand::Left) ? RE::MagicSystem::CastingSource::kLeftHand
+                                              : RE::MagicSystem::CastingSource::kRightHand;
+        auto* caster = player->GetMagicCaster(src);
+        if (!caster) return;
+        MAGIC_DEBUG_LOG("[Action] ForceChargeComplete: hand={} castingTimer={:.3f} -> 0",
+                        (hand == Hand::Left) ? "Left" : "Right", caster->castingTimer);
+        caster->castingTimer = 0.f;
+    }
+
+    void DrainMagicka(RE::PlayerCharacter* player, float amount) {
+        if (!player || amount <= 0.f) return;
+        auto* avo = player->AsActorValueOwner();
+        if (!avo) return;
+        const float magicka = avo->GetActorValue(RE::ActorValue::kMagicka);
+        const float drain = std::min(amount, std::max(magicka, 0.f));
+        MAGIC_DEBUG_LOG("[Action] DrainMagicka: owed={:.1f} magicka={:.1f} -> {:.1f}", amount, magicka,
+                        magicka - drain);
+        if (drain > 0.f) avo->DamageActorValue(RE::ActorValue::kMagicka, drain);
     }
 }

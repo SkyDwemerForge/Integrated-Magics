@@ -11,13 +11,6 @@
 #include "UI/Strings.h"
 #include "UI/TextureManager.h"
 
-#ifndef DLLEXPORT
-    #include "REL/Relocation.h"
-#endif
-#ifndef DLLEXPORT
-    #define DLLEXPORT __declspec(dllexport)
-#endif
-
 namespace {
     static std::string g_pendingEssPath;
     static std::string g_currentEssPath;
@@ -186,8 +179,8 @@ namespace {
     }
 }
 
-extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface* skse) {
-    SKSE::Init(skse);
+SKSE_PLUGIN_LOAD(const SKSE::LoadInterface* skse) {
+    SKSE::Init(skse, {.trampoline = true, .trampolineSize = IntegratedMagic::Hooks::kHookSpaceBytes});
     InitializeLogger();
     IntegratedMagic::StyleConfig::Get().Load();
     if (const auto mi = SKSE::GetMessagingInterface()) {

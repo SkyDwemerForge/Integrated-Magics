@@ -14,6 +14,12 @@ build
 cmake-build*
 *.dll
 *.pdb
+bin/
+obj/
+*.obj
+*.exe
+*.log
+.env*
 
 # Skyrim archive files
 *.bsa

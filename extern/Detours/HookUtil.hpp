@@ -1,13 +1,31 @@
 #pragma once
-#include "detours.hpp"
+#include <format>
+#include <source_location>
+
 #include "REL/Relocation.h"
 #include "SKSE/SKSE.h"
+#include "detours.hpp"
 
 namespace Hook::stl {
 
+    namespace detail {
+        // Hook space is reserved once in SKSEPluginLoad (see include/Hooks.h); helpers only check and consume it.
+        // Fails naming the calling Install() instead of the library's generic "Failed to handle allocation request".
+        inline void EnsureHookSpace(std::size_t a_bytes, std::source_location a_loc) {
+            auto& t = SKSE::GetTrampoline();
+            if (t.empty() || t.free_size() < a_bytes) {
+                SKSE::stl::report_and_fail(
+                    std::format("Integrated Magic: not enough hook space to install hook at {}: need {} B, free {} B "
+                                "of {} B reserved",
+                                a_loc.function_name(), a_bytes, t.free_size(), t.capacity()),
+                    a_loc);
+            }
+        }
+    }
+
     template <class T, std::size_t Size = 5>
-    void write_call(std::uintptr_t a_src) {
-        SKSE::AllocTrampoline(14);
+    void write_call(std::uintptr_t a_src, std::source_location a_loc = std::source_location::current()) {
+        detail::EnsureHookSpace(Size == 6 ? 8 : 14, a_loc);
         auto& trampoline = SKSE::GetTrampoline();
         if constexpr (Size == 6) {
             T::func = *reinterpret_cast<uintptr_t*>(trampoline.write_call<6>(a_src, T::thunk));
@@ -17,8 +35,9 @@ namespace Hook::stl {
     }
 
     template <class T, std::size_t Size = 5>
-    void write_call(REL::VariantID a_varId, REL::VariantOffset a_Offs = VariantOffset(0x0, 0x0, 0x0)) {
-        SKSE::AllocTrampoline(14);
+    void write_call(REL::VariantID a_varId, REL::VariantOffset a_Offs = VariantOffset(0x0, 0x0, 0x0),
+                    std::source_location a_loc = std::source_location::current()) {
+        detail::EnsureHookSpace(Size == 6 ? 8 : 14, a_loc);
         auto& trampoline = SKSE::GetTrampoline();
         const auto address = a_varId.address() + a_Offs.offset();
         if constexpr (Size == 6) {
@@ -29,8 +48,9 @@ namespace Hook::stl {
     }
 
     template <class T, std::size_t Size = 5>
-    void write_call(REL::RelocationID a_RelId, REL::VariantOffset a_Offs = VariantOffset(0x0, 0x0, 0x0)) {
-        SKSE::AllocTrampoline(14);
+    void write_call(REL::RelocationID a_RelId, REL::VariantOffset a_Offs = VariantOffset(0x0, 0x0, 0x0),
+                    std::source_location a_loc = std::source_location::current()) {
+        detail::EnsureHookSpace(Size == 6 ? 8 : 14, a_loc);
         auto& trampoline = SKSE::GetTrampoline();
         const auto address = a_RelId.address() + a_Offs.offset();
         if constexpr (Size == 6) {
@@ -41,15 +61,16 @@ namespace Hook::stl {
     }
 
     template <class T>
-    void write_jmp(std::uintptr_t a_src) {
-        SKSE::AllocTrampoline(8);
+    void write_jmp(std::uintptr_t a_src, std::source_location a_loc = std::source_location::current()) {
+        detail::EnsureHookSpace(14, a_loc);
         auto& trampoline = SKSE::GetTrampoline();
         T::func = trampoline.write_branch<5>(a_src, T::thunk);
     }
 
     template <class T>
-    void write_jmp(REL::VariantID a_Id, REL::VariantOffset a_Offs = VariantOffset(0x0, 0x0, 0x0)) {
-        SKSE::AllocTrampoline(8);
+    void write_jmp(REL::VariantID a_Id, REL::VariantOffset a_Offs = VariantOffset(0x0, 0x0, 0x0),
+                   std::source_location a_loc = std::source_location::current()) {
+        detail::EnsureHookSpace(14, a_loc);
         auto& trampoline = SKSE::GetTrampoline();
         T::func = trampoline.write_branch<5>(a_Id.address() + a_Offs.offset(), T::thunk);
     }

@@ -12,5 +12,8 @@
       "features": ["dx11-binding", "win32-binding", "freetype"]
     }
   ],
-  "builtin-baseline": "c27eeddba73f608f10605d80bc0144c1166f8fb7"
+  "overrides": [
+    { "name": "imgui", "version": "1.89.1" }
+  ],
+  "builtin-baseline": "00c5775211f45cd08b37fce0484b4cb940e422ab"
 }

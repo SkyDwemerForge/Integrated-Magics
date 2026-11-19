@@ -19,11 +19,14 @@ namespace IntegratedMagic {
         std::optional<StopHandDispatchIntent> rightAttack;
         bool finalizeLeft{false};
         bool finalizeRight{false};
+        float magickaToDrain{0.f};  // Skip Channeling: skipped charge cost the controller must drain now
     };
 
     struct PumpCastPhaseResult {
-        bool startAttack{false};      // deferred DOWN: re-enable hold and dispatch DOWN
-        bool releaseAttack{false};    // UP only: dispatch UP, DOWN deferred via pendingRestartNextFrame
+        bool startAttack{false};
+        bool releaseAttack{false};
+        bool forceChargeComplete{false};  // single hand: controller must complete this hand's charge now
+        bool chargeSkipEligible{false};   // dual cast: hand is eligible; PumpAutomatic pairs both hands
         std::optional<StopDispatchIntent> stopAttack;
     };
 
@@ -50,15 +53,17 @@ namespace IntegratedMagic {
     struct CastInterruptResult {
         float finishedLeft{-1.f};
         float finishedRight{-1.f};
-        bool releaseLeft{false};   // UP only; DOWN deferred via pendingRestartNextFrame
+        bool releaseLeft{false};
         bool releaseRight{false};
     };
 
     struct PumpAutomaticResult {
-        bool startLeftAttack{false};   // deferred DOWN (UP was sent last frame)
+        bool startLeftAttack{false};
         bool startRightAttack{false};
-        bool releaseLeftAttack{false};  // UP only (DOWN deferred to next frame)
+        bool releaseLeftAttack{false};
         bool releaseRightAttack{false};
+        bool forceChargeLeft{false};
+        bool forceChargeRight{false};
 
         std::optional<StopDispatchIntent> stopLeftAttack;
         std::optional<StopDispatchIntent> stopRightAttack;

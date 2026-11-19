@@ -32,5 +32,6 @@ namespace IntegratedMagic::Inbound::PollInputDevicesHook {
 
     void Install() {
         Hook::stl::write_call<Impl>(REL::RelocationID(67315, 68617, 0xC519E0), REL::VariantOffset(0x7B, 0x7B, 0x81));
+        spdlog::info("[Hooks] PollInputDevicesHook installed");
     }
 }

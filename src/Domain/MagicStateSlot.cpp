@@ -56,6 +56,8 @@ namespace IntegratedMagic {
         hm.pendingRestartNextFrame = false;
         hm.startRequestSecs = 0.f;
         hm.castingElapsedSecs = 0.f;
+        hm.chargeSkipped = false;
+        hm.skipMagickaOwed = 0.f;
         hm.autoCastPhase = AutoCastPhase::Done;
         float held = -1;
         if (_aa.Held(hand)) {
@@ -75,8 +77,8 @@ namespace IntegratedMagic {
         hm.wantAutoAttack = ss.autoAttack;
         const bool newPressActive = !hm.pressActive;
         MAGIC_DEBUG_LOG("[State] TogglePressHand: hand={} mode={} wantAuto={} pressActive={} → {}",
-                        IsLeft(hand) ? "Left" : "Right", static_cast<int>(ss.mode), ss.autoAttack,
-                        hm.pressActive, newPressActive);
+                        IsLeft(hand) ? "Left" : "Right", static_cast<int>(ss.mode), ss.autoAttack, hm.pressActive,
+                        newPressActive);
         hm.pressActive = newPressActive;
         if (!hm.pressActive) FinishHand(hand);
     }
@@ -400,9 +402,9 @@ namespace IntegratedMagic {
     }
 
     AttackEnabledResult MagicState::OnEquipComplete() {
-        MAGIC_DEBUG_LOG("[State] OnEquipComplete: left(auto={} phase={}) right(auto={} phase={})",
-                        _left.autoActive, static_cast<int>(_left.autoCastPhase),
-                        _right.autoActive, static_cast<int>(_right.autoCastPhase));
+        MAGIC_DEBUG_LOG("[State] OnEquipComplete: left(auto={} phase={}) right(auto={} phase={})", _left.autoActive,
+                        static_cast<int>(_left.autoCastPhase), _right.autoActive,
+                        static_cast<int>(_right.autoCastPhase));
         _inSlotSetup = false;
 
         auto* player = GetPlayer();

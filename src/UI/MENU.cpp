@@ -11,8 +11,8 @@
 #include "Config/Notifications.h"
 #include "Config/StyleConfig.h"
 #include "PCH.h"
-#include "Shared/CaptureState.h"
 #include "SKSEMenuFramework.h"
+#include "Shared/CaptureState.h"
 #include "Shared/SpellType.h"
 #include "UI/HudManager.h"
 #include "UI/PolyFill.h"
@@ -461,8 +461,7 @@ namespace {
         constexpr float kCanvasSize = 200.f;
         constexpr float kRadius = 80.f;
 
-        ImGuiMCP::ImVec2 origin{};
-        ImGuiMCP::GetCursorScreenPos(&origin);
+        const ImGuiMCP::ImVec2 origin = ImGuiMCP::GetCursorScreenPos();
         const ImGuiMCP::ImVec2 center = {origin.x + kCanvasSize * 0.5f, origin.y + kCanvasSize * 0.5f};
         const ImGuiMCP::ImVec2 canvasEnd = {origin.x + kCanvasSize, origin.y + kCanvasSize};
 
@@ -1396,6 +1395,22 @@ namespace {
                                                     "the slot.")
                           .c_str());
         }
+
+        if (bool v5 = cfg.skipChannelingPatch;
+            ImGuiMCP::Checkbox(IntegratedMagic::Strings::Get("Item_SkipChanneling", "Skip channeling").c_str(), &v5)) {
+            cfg.skipChannelingPatch = v5;
+            dirty = true;
+        }
+        if (ImGuiMCP::IsItemHovered()) {
+            ImGuiMCP::SetTooltip("%s",
+                                 IntegratedMagic::Strings::Get(
+                                     "Tooltip_SkipChanneling",
+                                     "When enabled, Fire-and-Forget spells cast automatically (Automatic mode,\n"
+                                     "or Press with auto-attack) skip the hand charging animation and fire instantly.\n"
+                                     "Bound weapons are included; their summon animation is kept.\n"
+                                     "Concentration spells are not affected.")
+                                     .c_str());
+        }
     }
 }
 
@@ -1405,8 +1420,7 @@ void __stdcall IntegratedMagic::MENU::DrawSettings() {
 
     {
         constexpr float kButtonWidth = 160.0f;
-        ImGuiMCP::ImVec2 region{};
-        ImGuiMCP::GetContentRegionAvail(&region);
+        const ImGuiMCP::ImVec2 region = ImGuiMCP::GetContentRegionAvail();
         const float rightEdge = ImGuiMCP::GetCursorPosX() + region.x;
         ImGuiMCP::SetCursorPosX(rightEdge - kButtonWidth);
         ImGuiMCP::BeginDisabled(!g_pending);
