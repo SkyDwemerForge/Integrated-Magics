@@ -1,5 +1,6 @@
 #pragma once
-#include "Config/InputConstants.h"
+
+#include <Shared/InputConstants.h>
 #include "Config/Ports/PatchSettings.h"
 #include "Input/ExclusiveStore.h"
 #include "Input/HotkeyCacheStore.h"
