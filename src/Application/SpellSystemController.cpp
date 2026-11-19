@@ -72,6 +72,15 @@ namespace Application {
 
             const auto autoResult = IntegratedMagic::MagicState::Get().PumpAutomatic(dt);
 
+            if (autoResult.forceChargeLeft || autoResult.forceChargeRight) {
+                if (auto* pc = RE::PlayerCharacter::GetSingleton()) {
+                    if (autoResult.forceChargeLeft)
+                        IntegratedMagic::MagicAction::ForceChargeComplete(pc, IntegratedMagic::Hand::Left);
+                    if (autoResult.forceChargeRight)
+                        IntegratedMagic::MagicAction::ForceChargeComplete(pc, IntegratedMagic::Hand::Right);
+                }
+            }
+
             if (autoResult.releaseLeftAttack) {
                 MAGIC_DEBUG_LOG("[FLOW] OnFrame: release Left (UP only, DOWN next frame)");
                 IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Left, 0.0f, 0.1f);
@@ -221,6 +230,8 @@ namespace Application {
         if (tag == "MRh_SpellFire_Event"sv) {
             const auto r = state.OnSpellFired(Right);
 
+            if (r.magickaToDrain > 0.f)
+                IntegratedMagic::MagicAction::DrainMagicka(RE::PlayerCharacter::GetSingleton(), r.magickaToDrain);
             if (r.leftAttack)
                 IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Left, 0.0f, r.leftAttack->heldSecs);
             if (r.rightAttack)
@@ -233,6 +244,8 @@ namespace Application {
         if (tag == "MLh_SpellFire_Event"sv) {
             const auto r = state.OnSpellFired(Left);
 
+            if (r.magickaToDrain > 0.f)
+                IntegratedMagic::MagicAction::DrainMagicka(RE::PlayerCharacter::GetSingleton(), r.magickaToDrain);
             if (r.leftAttack)
                 IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Left, 0.0f, r.leftAttack->heldSecs);
             if (r.rightAttack)

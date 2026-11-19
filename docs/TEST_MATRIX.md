@@ -101,6 +101,22 @@ Baseline: **skipEquipAnim OFF / skipChanneling OFF**. Repetir depois com patches
 
 > Repetir 5.1–5.5 para: 1 spell, dual cast, Concentration, Power/Shout.
 
+### 5b. Skip Channeling × Bound weapons
+
+Validar com o build **DEBUG** e acompanhar as linhas `[FLOW] SkipChanneling:` no log. Ver `specs/002-fix-skip-channeling-bound/`.
+
+- [ ] **5b.1** Bound Sword, Automatic, mão direita, patch ON → invoca **uma vez**, sem pose de carga sustentada, a arma aparece na mão, sem loop
+- [ ] **5b.2** Mesmo cenário na mão esquerda
+- [ ] **5b.3** Bound Sword, Press + auto-attack, patch ON → mesmo resultado; a segunda pressão encerra e restaura como com o patch OFF
+- [ ] **5b.4** Dual bound (mesma spell nas duas mãos) → log mostra um único `applied dual L+R`; as duas mãos invocam e encerram juntas
+- [ ] **5b.5** Slot misto: Bound Sword na direita + Firebolt na esquerda → cada mão segue o seu tipo de spell, sem loop
+- [ ] **5b.6** Bound Bow (duas mãos) → invoca uma vez e a sessão encerra normalmente
+- [ ] **5b.7** Skip Equip Animations ON + Skip Channeling ON → sem loop (anotar se o saque da arma fica encurtado)
+- [ ] **5b.8** Magicka gasta com o patch ON igual à do patch OFF (±1) para Bound Sword, Fireball e Firebolt
+- [ ] **5b.9** Bound Sword já invocada (arma ainda ativa na mão) → ativar o slot de novo com o patch ON → sem loop; resultado igual ao do patch OFF
+- [ ] **5b.10** Bloquear, sofrer stagger ou abrir um menu durante a invocação com o patch ON → a sessão termina, o equipamento é restaurado e não há loop (log mostra `ForceExit` ou `SkipChanneling: interrupted after skip`)
+- [ ] **5b.11** Magia de concentração (Flames) em Automatic com o patch ON → carga e canalização normais; log mostra `SkipChanneling: skipped ... reason=type=Concentration`
+
 ---
 
 ## 6. Patches de input

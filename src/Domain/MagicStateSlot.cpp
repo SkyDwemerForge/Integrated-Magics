@@ -56,6 +56,8 @@ namespace IntegratedMagic {
         hm.pendingRestartNextFrame = false;
         hm.startRequestSecs = 0.f;
         hm.castingElapsedSecs = 0.f;
+        hm.chargeSkipped = false;
+        hm.skipMagickaOwed = 0.f;
         hm.autoCastPhase = AutoCastPhase::Done;
         float held = -1;
         if (_aa.Held(hand)) {

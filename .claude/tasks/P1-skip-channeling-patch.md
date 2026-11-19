@@ -1,5 +1,10 @@
 # P1 — Patch: Skip Channeling (cast imediato via hotkey)
 
+> **Superseded (2026-11-19):** este design (`CastSpellImmediate`) **nunca foi implementado**. O patch real completa a
+> carga zerando `castingTimer` (`MagicAction::ForceChargeComplete`), sem drenar magicka, e trata uma interrupção após o
+> skip como falha real (sem retry). Ver `specs/002-fix-skip-channeling-bound/` e
+> `specs/002-fix-skip-channeling-bound/contracts/skip-channeling.md`.
+
 ## Contexto
 
 Atualmente, quando um slot com magia é ativado via hotkey, o fluxo é:
@@ -19,16 +24,20 @@ O patch **SkipChannelingPatch** elimina esse efeito ao chamar `RE::MagicCaster::
 
 ## Escopo de aplicação
 
+Escopo atual (decisão de 2026-11-19, `specs/002-fix-skip-channeling-bound/`):
+
 | Modo | Tipo | Aplica? | Razão |
 |---|---|---|---|
-| `Automatic` | `Cast` | ✅ Sim | Fire-and-forget; disparo único |
-| `Automatic` | `Power` | ❌ Não | Powers têm seu próprio caminho (`ShoutState`) |
-| `Hold` | `Concentration` | ❌ Não | Precisa do hold contínuo |
-| `Press` | `Bound` | ❌ Não | Equip visual é intencional (invocação) |
+| `Automatic` ou `Press` + auto-attack | `Cast` | ✅ Sim | Fire-and-forget; disparo único |
+| `Automatic` ou `Press` + auto-attack | `Bound` | ✅ Sim | Pula só a animação de carga; a animação da arma aparecendo na mão é mantida |
+| qualquer | `Concentration` | ❌ Não | Não há carga a pular; precisa da canalização contínua |
+| qualquer | `Power` / `Shout` | ❌ Não | Usam o slot de voz (`ShoutState`) |
+| `Hold` | qualquer | ❌ Não | O patch só age em cast automático (`HandMode::autoActive`) |
 
-Só se aplica quando **ambas** as condições são verdadeiras:
-- `ss.mode == ActivationMode::Automatic`
-- O `SpellType` do slot é `SpellType::Cast` (determinado no `PrepareSlotEntry`)
+A classificação usa `DetectSpellType` (`Cast` ou `Bound`) e exige charge time > 0. Em dual cast, as duas mãos são
+forçadas no mesmo frame, ou nenhuma.
+
+> Escopo original deste documento (histórico): só `Automatic` + `SpellType::Cast`; `Press` + `Bound` excluído.
 
 ---
 
@@ -56,6 +65,10 @@ auto* caster = player->GetMagicCaster(RE::MagicSystem::CastingSource::kLeftHand)
 ---
 
 ## Arquivos a modificar
+
+> **Histórico, não implementado:** as seções "Arquivos a modificar", "Implementação" (1–8), "Comportamento esperado"
+> e as linhas de log esperadas (`[Action] CastHandImmediate`, `[State] OnImmediateCastComplete`) descrevem o design
+> original. Nenhum desses símbolos existe no código.
 
 | Arquivo | Alteração |
 |---|---|
@@ -287,6 +300,8 @@ Visualmente: nenhuma animação de carregamento. A magia simplesmente dispara ao
 ## Considerações importantes
 
 ### castStopsToSkip
+> **Não existe mais no código** (verificado em 2026-11-19); esta consideração não se aplica.
+
 Ao usar `CastSpellImmediate`, o ciclo `attack DOWN → castIsStable → attack UP → castStop` não ocorre. Logo, o contador `castStopsToSkip` (usado para ignorar `castStop` espúrios do skipEquipAnimation mod) **não deve ser incrementado** para mãos em modo imediato. Verificar se `EnterHand` ou `castStopsToSkip` precisa ser guardado contra o path imediato.
 
 ### `dirtyLeft / dirtyRight`

@@ -38,6 +38,10 @@ namespace IntegratedMagic {
         bool finished{false};
         bool pendingRestartNextFrame{false};
         bool needsManualFireInKReady{false};
+        // Skip Channeling forced this hand's charge in the current attempt (reset per attempt).
+        bool chargeSkipped{false};
+        // Skip Channeling: charge cost the game did not drain; paid when the spell fires (reset with chargeSkipped).
+        float skipMagickaOwed{0.f};
         float startRequestSecs{0.f};
         float castingElapsedSecs{0.f};
         bool waitingSpellFireFinalize{false};

@@ -1402,12 +1402,14 @@ namespace {
             dirty = true;
         }
         if (ImGuiMCP::IsItemHovered()) {
-            ImGuiMCP::SetTooltip(
-                "%s", IntegratedMagic::Strings::Get("Tooltip_SkipChanneling",
-                                                    "When enabled, Cast spells in Automatic mode fire instantly\n"
-                                                    "without the charging animation.\n"
-                                                    "Only affects Fire-and-Forget spells (not Concentration or Bound).")
-                          .c_str());
+            ImGuiMCP::SetTooltip("%s",
+                                 IntegratedMagic::Strings::Get(
+                                     "Tooltip_SkipChanneling",
+                                     "When enabled, Fire-and-Forget spells cast automatically (Automatic mode,\n"
+                                     "or Press with auto-attack) skip the hand charging animation and fire instantly.\n"
+                                     "Bound weapons are included; their summon animation is kept.\n"
+                                     "Concentration spells are not affected.")
+                                     .c_str());
         }
     }
 }

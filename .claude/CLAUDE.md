@@ -147,6 +147,8 @@ DXGIPresentHook → HudManager::DrawHudFrame()
 - `holdFiredAndWaitingCastStop` — Hold mode: attack was sent, waiting for final castStop
 - `pendingRestartNextFrame` — UP was dispatched this frame; DOWN should go on the next frame
 - `needsManualFireInKReady` — cast was confirmed externally without a synthetic hold; fire via stopAttack from kReady
+- `chargeSkipped` — Skip Channeling forced this hand's charge in the current attempt. An interruption while set is a real failure (finish + finalize, no retry), never "spurious". Reset by `FinishHand`, `RequestAutoAttackStart`, the post-cast spurious branch and every value reset of `HandMode`
+- `skipMagickaOwed` — Skip Channeling: the charge cost the game did not drain because the charge was skipped. Set with `chargeSkipped`, paid by `OnSpellFired` (`SpellFiredResult::magickaToDrain`), and reset in the same places as `chargeSkipped`, so a failed attempt costs nothing extra
 - `startRequestSecs` — time spent in `StartRequested` before timing out and retrying
 - `castingElapsedSecs` — elapsed time since cast confirmed (Casting phase)
 - `waitingSpellFireFinalize` — waiting for spell fire event or caster idle to finalize
@@ -196,7 +198,11 @@ For `Automatic` (and `Hold` with `wantAutoAttack`), the plugin drives the cast v
    - If `kRedispatchInterval` (0.15 s) elapses without progress: same UP → DOWN restart.
    - **Dual-cast sync**: in dual-cast mode, whenever one hand restarts, the other is also released so both hands go DOWN together on the same frame — required for the game's behavior machine to stay in dual-cast mode.
 2. **Casting** — caster reached `kUnk02`. Accumulates `castingElapsedSecs`. Waits for `IsChargeComplete`.  
-   - `SkipChanneling` patch: zeros `castingTimer` immediately (after draining magicka) so charge is considered complete instantly. Useful for Automatic mode on spells with long charge animations.
+   - `SkipChanneling` patch (Automatic, or Press with auto-attack): once per attempt, when the caster is in `kUnk02` and the slot spell is classified `Cast` or `Bound` (`DetectSpellType`) with charge time > 0, the domain emits `forceChargeComplete`. `SpellSystemController` then calls `MagicAction::ForceChargeComplete`, which zeroes `castingTimer`.
+     - **Magicka**: the game drains a charge's cost progressively (cost × frame / chargeTime), so a skipped charge pays almost nothing by itself. The domain records the unpaid part in `skipMagickaOwed`: `cost × (castingTimer − frame) / chargeTime`, where the frame term is what the game still drains in the skip frame. Dual cast uses half of `cost × GetDualCastCostMultiplier` per hand. `OnSpellFired` returns it as `magickaToDrain`, and `SpellSystemController` calls `MagicAction::DrainMagicka` **after the spell fired**. Never drain during the charge: that makes the game cancel the cast, which caused the bound-weapon restart loop.
+     - **Dual cast**: `PumpCastPhase` only reports `chargeSkipEligible`, and `PumpAutomatic` forces both hands in the same frame, or neither.
+     - **Failure**: an interruption after the skip ends the hand(s) with no retry.
+     - See `specs/002-fix-skip-channeling-bound/`.
 3. **WaitingChargeRelease** — charge detected as complete. Attack button released UP. Spell fires.
 4. **Done** — `OnSpellFired` received; `FinishHand` called; session exits.
 
@@ -233,6 +239,8 @@ For `Automatic` (and `Hold` with `wantAutoAttack`), the plugin drives the cast v
 - `ClearHandSpell(player, hand)` / `ClearVoiceShout(player)`
 - `SetSkipEquipVars(player, on)` / `ResetSkipEquipToken()` / `ApplySkipEquipAnimReturn(...)`
 - `DrawWeaponMagicHands(bool)`
+- `ForceChargeComplete(player, hand)` — Skip Channeling: zeroes the hand caster's `castingTimer` so the charge completes now (no magicka write)
+- `DrainMagicka(player, amount)` — Skip Channeling: after the spell fired, drains the charge cost the skipped charge left unpaid. Clamped so magicka never goes below 0
 
 **`Outbound::RestoreOneHand` / `ReequipPrevExtraEquipped`** (`include/Adapters/Outbound/RestoreEquip.h`) — restores items from `RestoreContext::snapshot`. Handles per-hand objects, spells, shout, and extra worn items.
 
@@ -249,7 +257,7 @@ For `Automatic` (and `Hold` with `wantAutoAttack`), the plugin drives the cast v
 - `skipEquipAnimationOnReturnPatch` — same, applied when restoring equipment
 - `requireExclusiveHotkeyPatch` — exclusive hotkey detection (see Input system)
 - `pressBothAtSamePatch` — simultaneous key window detection (see Input system)
-- `skipChannelingPatch` — instantly completes spell charge in Automatic mode (zeros `castingTimer`)
+- `skipChannelingPatch` — instantly completes the charge of `Cast` / `Bound` spells cast automatically (Automatic, or Press with auto-attack) via `MagicAction::ForceChargeComplete`; the part of the cost the skipped charge did not drain is charged after the spell fires (`MagicAction::DrainMagicka`), so the total equals the vanilla cost
 
 **`include/Config/Ports/`** — sub-configs: `InputBindings`, `SlotAssignments`, `SpellSettings`, `HudSettings`, `PatchSettings`.
 
@@ -292,7 +300,7 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 | Bug in dual-cast sync | `src/Domain/MagicStatePump.cpp` (`PumpAutomatic` dual-cast sync, `OnCasterInterrupt` dual-cast sync) |
 | Bug in auto-attack timing | `src/Domain/MagicStatePump.cpp` (`PumpAutoAttack`, `RequestAutoAttackStart`), `AutoAttackState` |
 | Shout/power behavior | `include/Domain/State.h` (`ShoutState`), `src/Domain/MagicStatePump.cpp` (`OnShoutStop`) |
-| Skip channeling behavior | `src/Domain/MagicStatePump.cpp` (`PumpCastPhase` → SkipChanneling block) |
+| Skip channeling behavior | `src/Domain/MagicStatePump.cpp` (`PumpCastPhase` → SkipChanneling block, `PumpAutomatic` dual-cast pairing, `OnCasterInterrupt` `chargeSkipped` failure path, `OnSpellFired` magicka owed), `src/Adapters/Outbound/MagicEquip.cpp` (`ForceChargeComplete`, `DrainMagicka`), `src/Application/SpellSystemController.cpp` (`NotifyAnimEvent` → `DrainMagicka`) |
 | Skip equip animation | `include/Adapters/Outbound/MagicEquip.h` (`SetSkipEquipVars`, `ApplySkipEquipAnimReturn`) |
 | Hotkey not detected / double-firing | `include/Input/ExclusiveStore.h`, `src/Input/ExclusiveTracker.cpp` |
 | Hotkey rebinding | `include/Input/CaptureState.h`, `Application::InputController::RequestHotkeyCapture()` |

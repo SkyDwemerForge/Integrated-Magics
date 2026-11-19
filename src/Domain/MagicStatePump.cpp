@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <utility>
 
 #include "Config/ConfigAdapter.h"
@@ -7,8 +8,40 @@
 #include "PCH.h"
 #include "Shared/Hand.h"
 #include "Shared/InventoryUtil.h"
+#include "Shared/SpellTypeDetector.h"
 
 namespace IntegratedMagic {
+    namespace {
+        // Skip Channeling applies to spells the plugin classifies as Cast or Bound (research R12).
+        bool IsSkipChannelingType(SpellType type) { return type == SpellType::Cast || type == SpellType::Bound; }
+
+        // The game drains a charging spell's cost progressively (cost × frame / chargeTime) and still drains the frame
+        // in which the timer is zeroed. What a skipped charge leaves unpaid is the rest of the timer (gate T015, R2).
+        float SkippedChargeCost(const RE::MagicCaster* caster, float chargeTime, float cost) {
+            if (!caster || chargeTime <= 0.f || cost <= 0.f) return 0.f;
+            const float unpaid = std::clamp(caster->castingTimer - RE::GetSecondsSinceLastFrame(), 0.f, chargeTime);
+            return cost * unpaid / chargeTime;
+        }
+
+        [[maybe_unused]] const char* SpellTypeName(SpellType type) {
+            using enum SpellType;
+            switch (type) {
+                case Concentration:
+                    return "Concentration";
+                case Cast:
+                    return "Cast";
+                case Bound:
+                    return "Bound";
+                case Power:
+                    return "Power";
+                case Shout:
+                    return "Shout";
+                default:
+                    return "Unknown";
+            }
+        }
+    }
+
     PumpResult MagicState::PumpAutoAttack(float dt) {
         using enum Hand;
         const float add = dt > 0.f ? dt : 0.f;
@@ -50,6 +83,20 @@ namespace IntegratedMagic {
         hm.castingElapsedSecs = 0.f;
 
         MAGIC_DEBUG_LOG("[State] ConfirmAutoCastStarted: hand={}", IsLeft(hand) ? "Left" : "Right");
+
+        if (hm.autoActive && Config::MagicConfigAdapter::Get().SkipChanneling()) {
+            const auto id = (_session.activeSlot >= 0) ? Slots::GetSlotSpell(_session.activeSlot, hand) : 0;
+            if (const auto* spell = id ? RE::TESForm::LookupByID<RE::SpellItem>(id) : nullptr) {
+                const auto type = DetectSpellType(spell);
+                if (spell->GetChargeTime() <= 0.f) {
+                    MAGIC_DEBUG_LOG("[FLOW] SkipChanneling: skipped hand={} spell={:#010x} reason=chargeTime=0",
+                                    IsLeft(hand) ? "L" : "R", spell->GetFormID());
+                } else if (!IsSkipChannelingType(type)) {
+                    MAGIC_DEBUG_LOG("[FLOW] SkipChanneling: skipped hand={} spell={:#010x} reason=type={}",
+                                    IsLeft(hand) ? "L" : "R", spell->GetFormID(), SpellTypeName(type));
+                }
+            }
+        }
     }
 
     bool MagicState::RequestAutoAttackStart(Hand hand, bool /*clearWaitAfterEquip*/) {
@@ -73,6 +120,8 @@ namespace IntegratedMagic {
         _aa.Secs(hand) = 0.f;
         hm.autoCastPhase = AutoCastPhase::StartRequested;
         hm.startRequestSecs = 0.f;
+        hm.chargeSkipped = false;
+        hm.skipMagickaOwed = 0.f;
 
         MAGIC_DEBUG_LOG("[FLOW] RequestAutoAttackStart: hand={} ACCEPTED - aaHeld=true phase=StartRequested", handStr);
         return true;
@@ -377,16 +426,25 @@ namespace IntegratedMagic {
             const bool skipCh = Config::MagicConfigAdapter::Get().SkipChanneling();
             bool chargeComplete = false;
             if (spell) {
-                if (skipCh && castStateEnum == RE::MagicCaster::State::kUnk02 && spell->GetChargeTime() > 0.f) {
-                    if (auto* mc = GetMagicCaster(player, src)) {
-                        const float manaToDrain = mc->currentSpellCost * mc->castingTimer;
-                        if (manaToDrain > 0.f) {
-                            if (auto* avo = player->AsActorValueOwner()) {
-                                avo->DamageActorValue(RE::ActorValue::kMagicka, manaToDrain);
-                            }
-                        }
-                        mc->castingTimer = 0.f;
-                    }
+                // Skip Channeling: the domain only decides; MagicAction::ForceChargeComplete performs the game write
+                // (Constitution I). The cost the skipped charge leaves unpaid is recorded and charged only after the
+                // spell fires (OnSpellFired): draining it during the charge makes the game cancel the cast (R1, R2).
+                const bool eligible = skipCh && !hm.chargeSkipped && castStateEnum == RE::MagicCaster::State::kUnk02 &&
+                                      spell->GetChargeTime() > 0.f && IsSkipChannelingType(DetectSpellType(spell));
+                if (eligible && _session.isDualCasting) {
+                    // Dual cast: PumpAutomatic forces both hands in the same frame, or neither (R11, FR-012).
+                    result.chargeSkipEligible = true;
+                } else if (eligible) {
+                    hm.chargeSkipped = true;
+                    hm.skipMagickaOwed =
+                        SkippedChargeCost(caster, spell->GetChargeTime(), GetSpellMagickaCost(player, spell));
+                    result.forceChargeComplete = true;
+                    MAGIC_DEBUG_LOG(
+                        "[FLOW] SkipChanneling: applied hand={} spell={:#010x} '{}' chargeTime={:.2f} "
+                        "castingTimer={:.3f} cost={:.1f} casterCost={:.1f} owed={:.1f} magicka={:.1f}",
+                        IsLeft(hand) ? "L" : "R", spell->GetFormID(), spell->GetName(), spell->GetChargeTime(),
+                        caster->castingTimer, GetSpellMagickaCost(player, spell), caster->currentSpellCost,
+                        hm.skipMagickaOwed, GetPlayerMagicka(player));
                 } else {
                     chargeComplete = IsChargeComplete(caster, spell);
                 }
@@ -511,6 +569,18 @@ namespace IntegratedMagic {
 
         auto& hm = ModeFor(hand);
 
+        if (hm.chargeSkipped) {
+            // The spell fired: charge the cost the skipped charge left unpaid (R2). In dual cast the first fire event
+            // pays for both hands, because FinishHand below clears the other hand before its own event arrives.
+            float owed = std::exchange(hm.skipMagickaOwed, 0.f);
+            if (_session.isDualCasting) {
+                owed += std::exchange(ModeFor(IsLeft(hand) ? Hand::Right : Hand::Left).skipMagickaOwed, 0.f);
+            }
+            result.magickaToDrain = owed;
+            MAGIC_DEBUG_LOG("[FLOW] SkipChanneling: fired hand={} magicka={:.1f} owed={:.1f}", IsLeft(hand) ? "L" : "R",
+                            GetPlayerMagicka(GetPlayer()), owed);
+        }
+
         MAGIC_DEBUG_LOG(
             "[State] OnSpellFired: hand={} autoActive={} chargeComplete={} pressActive={} finished={} isDual={}",
             IsLeft(hand) ? "Left" : "Right", hm.autoActive, hm.chargeComplete, hm.pressActive, hm.finished,
@@ -615,6 +685,12 @@ namespace IntegratedMagic {
                 else
                     result.releaseRightAttack = true;
             }
+            if (src.forceChargeComplete) {
+                if (IsLeft(hand))
+                    result.forceChargeLeft = true;
+                else
+                    result.forceChargeRight = true;
+            }
             if (src.stopAttack) {
                 if (IsLeft(hand)) {
                     if (!result.stopLeftAttack) result.stopLeftAttack = StopDispatchIntent{src.stopAttack->heldSecs};
@@ -707,8 +783,38 @@ namespace IntegratedMagic {
 
         using enum Hand;
 
-        mergePumpPhase(Left, PumpCastPhase(Left, dt));
-        mergePumpPhase(Right, PumpCastPhase(Right, dt));
+        const auto leftPhase = PumpCastPhase(Left, dt);
+        const auto rightPhase = PumpCastPhase(Right, dt);
+        mergePumpPhase(Left, leftPhase);
+        mergePumpPhase(Right, rightPhase);
+
+        // Skip Channeling in dual cast: force both hands in the same frame, or neither (R11, FR-012, Constitution IV).
+        if (_session.isDualCasting && leftPhase.chargeSkipEligible && rightPhase.chargeSkipEligible) {
+            _left.chargeSkipped = true;
+            _right.chargeSkipped = true;
+            result.forceChargeLeft = true;
+            result.forceChargeRight = true;
+            if (auto* player = GetPlayer()) {
+                const auto* cL = GetMagicCaster(player, RE::MagicSystem::CastingSource::kLeftHand);
+                const auto* cR = GetMagicCaster(player, RE::MagicSystem::CastingSource::kRightHand);
+                const auto id = (_session.activeSlot >= 0) ? Slots::GetSlotSpell(_session.activeSlot, Left) : 0;
+                const auto* sp = id ? RE::TESForm::LookupByID<RE::SpellItem>(id) : nullptr;
+                if (sp) {
+                    // Each hand owes half of the dual-cast cost (cost × dual multiplier, as SlotCostUtil computes it).
+                    const float handCost =
+                        GetSpellMagickaCost(player, sp) * GetDualCastCostMultiplier(player, sp) * 0.5f;
+                    _left.skipMagickaOwed = SkippedChargeCost(cL, sp->GetChargeTime(), handCost);
+                    _right.skipMagickaOwed = SkippedChargeCost(cR, sp->GetChargeTime(), handCost);
+                }
+                MAGIC_DEBUG_LOG(
+                    "[FLOW] SkipChanneling: applied dual L+R spell={:#010x} '{}' castingTimerL={:.3f} "
+                    "castingTimerR={:.3f} casterCostL={:.1f} casterCostR={:.1f} owedL={:.1f} owedR={:.1f} "
+                    "magicka={:.1f}",
+                    id, sp ? sp->GetName() : "<null>", cL ? cL->castingTimer : -1.f, cR ? cR->castingTimer : -1.f,
+                    cL ? cL->currentSpellCost : -1.f, cR ? cR->currentSpellCost : -1.f, _left.skipMagickaOwed,
+                    _right.skipMagickaOwed, GetPlayerMagicka(player));
+            }
+        }
 
         if (_session.isDualCasting) {
             auto syncForRestart = [&](bool thisReleasing, bool& otherReleasing, Hand other) {
@@ -839,6 +945,27 @@ namespace IntegratedMagic {
                         IsLeft(hand) ? "Left" : "Right", static_cast<int>(hm.autoCastPhase), depleteEnergy,
                         hm.castingElapsedSecs);
 
+        // Skip Channeling forced this charge: an interruption now is a real failure, never "spurious".
+        // Retrying would repeat it (the restart loop), so finish the hand(s) and let the finalize path restore (R3).
+        if (hm.chargeSkipped) {
+            MAGIC_DEBUG_LOG("[FLOW] SkipChanneling: interrupted after skip hand={} magicka={:.1f} -> finish (no retry)",
+                            IsLeft(hand) ? "L" : "R", GetPlayerMagicka(GetPlayer()));
+            auto finishOne = [&](Hand h) {
+                const float f = FinishHand(h);
+                if (IsLeft(h))
+                    result.finishedLeft = f;
+                else
+                    result.finishedRight = f;
+                ScheduleSpellFireFinalize(h);
+            };
+            finishOne(hand);
+            if (_session.isDualCasting) {
+                const Hand other = IsLeft(hand) ? Hand::Right : Hand::Left;
+                if (!ModeFor(other).finished) finishOne(other);
+            }
+            return result;
+        }
+
         if (hm.autoCastPhase == AutoCastPhase::StartRequested) {
             _aa.Held(hand) = false;
             _aa.Secs(hand) = 0.f;
@@ -884,6 +1011,8 @@ namespace IntegratedMagic {
             hm.waitingChargeComplete = false;
             hm.chargeComplete = false;
             hm.castingElapsedSecs = 0.f;
+            hm.chargeSkipped = false;
+            hm.skipMagickaOwed = 0.f;
             _aa.Held(hand) = false;
             _aa.Secs(hand) = 0.f;
             hm.pendingRestartNextFrame = true;

@@ -19,11 +19,14 @@ namespace IntegratedMagic {
         std::optional<StopHandDispatchIntent> rightAttack;
         bool finalizeLeft{false};
         bool finalizeRight{false};
+        float magickaToDrain{0.f};  // Skip Channeling: skipped charge cost the controller must drain now
     };
 
     struct PumpCastPhaseResult {
-        bool startAttack{false};    
-        bool releaseAttack{false};   
+        bool startAttack{false};
+        bool releaseAttack{false};
+        bool forceChargeComplete{false};  // single hand: controller must complete this hand's charge now
+        bool chargeSkipEligible{false};   // dual cast: hand is eligible; PumpAutomatic pairs both hands
         std::optional<StopDispatchIntent> stopAttack;
     };
 
@@ -59,6 +62,8 @@ namespace IntegratedMagic {
         bool startRightAttack{false};
         bool releaseLeftAttack{false};
         bool releaseRightAttack{false};
+        bool forceChargeLeft{false};
+        bool forceChargeRight{false};
 
         std::optional<StopDispatchIntent> stopLeftAttack;
         std::optional<StopDispatchIntent> stopRightAttack;
