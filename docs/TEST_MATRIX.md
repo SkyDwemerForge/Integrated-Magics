@@ -26,6 +26,17 @@ Checklist de casos de uso para validar o funcionamento do sistema. Marque `[x]` 
 
 ---
 
+## 0. Startup & hooks
+
+Bloqueante: se algum item falhar, o resto da matriz não pode ser executado. Ver `specs/001-fix-trampoline-allocation/`.
+
+- [ ] **0.1** Iniciar o jogo via SKSE → chega ao menu principal sem nenhum diálogo de erro de `IntegratedMagic.dll`
+- [ ] **0.2** `IntegratedMagic.log` contém as seis linhas `[Hooks] ... installed` (PollInputDevicesHook, PlayerAnimGraphHook, D3DInitHook, DXGIPresentHook, MagicCasterInterruptHook, MagicCasterStartCastHook) e `[Hooks] hook space: 42 / 128 B used (33%), ...`, sem nenhuma linha `[Hooks]` de warn ou critical
+- [ ] **0.3** Iniciar com o load order completo de plugins SKSE → mesmo resultado de 0.1 e 0.2
+- [ ] **0.4** Repetir 0.1–0.3 no SE e no AE
+
+---
+
 ## 1. Casos críticos de cast (regressão dos bugs recentes)
 
 Os mais sensíveis — relacionados aos commits recentes (dual cast, skip channeling).
@@ -167,6 +178,7 @@ Baseline: **skipEquipAnim OFF / skipChanneling OFF**. Repetir depois com patches
 
 ## Prioridade de execução sugerida
 
+0. **Seção 0** (startup & hooks) — bloqueante
 1. **Seção 1** (regressão dual cast + channeling) — risco mais alto, bugs recentes
 2. **Seções 2 e 3** (matriz modo × conteúdo × tipo) — cobertura funcional central
 3. **Seções 5 e 6** (patches) — interações conhecidas por causar bugs espúrios

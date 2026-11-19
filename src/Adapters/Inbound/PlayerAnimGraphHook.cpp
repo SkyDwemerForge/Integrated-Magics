@@ -27,5 +27,6 @@ namespace IntegratedMagic::Inbound::PlayerAnimGraphHook {
         REL::Relocation<std::uintptr_t> vtbl{RE::VTABLE_PlayerCharacter[2]};
         const std::uintptr_t orig = vtbl.write_vfunc(1, &Impl::thunk);
         Impl::_orig = reinterpret_cast<Impl::Fn>(orig);
+        spdlog::info("[Hooks] PlayerAnimGraphHook installed");
     }
 }

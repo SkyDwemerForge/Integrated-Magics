@@ -27,5 +27,6 @@ namespace IntegratedMagic::Inbound::MagicCasterStartCastHook {
     void Install() {
         REL::Relocation<std::uintptr_t> vtbl{RE::VTABLE_ActorMagicCaster[0]};
         Impl::_orig = reinterpret_cast<Impl::Fn*>(vtbl.write_vfunc(6, &Impl::thunk));
+        spdlog::info("[Hooks] MagicCasterStartCastHook installed");
     }
 }

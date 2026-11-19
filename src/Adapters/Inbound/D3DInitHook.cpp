@@ -89,6 +89,6 @@ namespace IntegratedMagic::Inbound::D3DInitHook {
 
     void Install() {
         Hook::stl::write_call<Impl>(Impl::id, Impl::offset);
-        MAGIC_DEBUG_LOG("[Hooks] D3DInitHook installed");
+        spdlog::info("[Hooks] D3DInitHook installed");
     }
 }

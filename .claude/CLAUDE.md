@@ -27,7 +27,48 @@ Inbound Hooks → Input Layer → Application Controllers → Domain (MagicState
 | Save/load persistence | `IntegratedMagic::` | `include/Persistence/`, `src/Persistence/` |
 
 Entry point: `src/plugin.cpp` — SKSE plugin init, registers hooks, handles save/load events.
-Hook installation: `include/Hooks.h` / `src/Hooks.cpp`.
+Hook installation: `include/Hooks.h` / `src/Hooks.cpp` (see [Hooks](#hooks)).
+
+---
+
+## Hooks
+
+All hooks are installed once by `IntegratedMagic::Hooks::Install_Hooks()` during `SKSEPluginLoad`. The exception is `WndProcHook`, which `D3DInitHook` installs once the game window exists. Each `Install()` logs `[Hooks] <Name> installed` at `info` level, so the lines appear in release builds too.
+
+| Hook | Kind | Trampoline bytes | Target |
+|---|---|---|---|
+| `PollInputDevicesHook` | call (5-byte) | 14 | `RelocationID(67315, 68617)` + `VariantOffset(0x7B, 0x7B, 0x81)` |
+| `PlayerAnimGraphHook` | vtable | 0 | `VTABLE_PlayerCharacter[2]`, slot 1 (`BSTEventSink<BSAnimationGraphEvent>::ProcessEvent`) |
+| `D3DInitHook` | call (5-byte) | 14 | `RelocationID(75595, 77226)` + `VariantOffset(0x9, 0x275, 0x9)` |
+| `DXGIPresentHook` | call (5-byte) | 14 | `RelocationID(75461, 77246)` + `VariantOffset(0x9, 0x9, 0x15)` |
+| `MagicCasterInterruptHook` | vtable | 0 | `VTABLE_ActorMagicCaster[0]`, slot 8 |
+| `MagicCasterStartCastHook` | vtable | 0 | `VTABLE_ActorMagicCaster[0]`, slot 6 |
+| `WndProcHook` | window procedure | 0 | `SetWindowLongPtr` on the game window |
+
+### Hook space (trampoline) policy
+
+Call-site hooks (`Hook::stl::write_call` / `write_jmp` in `extern/Detours/HookUtil.hpp`) write their jump stubs into `SKSE::GetTrampoline()`. That space is **reserved exactly once**:
+
+- **Where**: `src/plugin.cpp` → `SKSE::Init(skse, {.trampoline = true, .trampolineSize = IntegratedMagic::Hooks::kHookSpaceBytes})`. The budget lives in `include/Hooks.h` (`kCallHookBytes`, `kCallHookCount`, `kHookSpaceBytes = 128`), and a `static_assert` keeps usage at or below 75%.
+- **Fallback**: if SKSE exposes no trampoline interface, `Install_Hooks()` allocates `kHookSpaceBytes` itself with `Trampoline::create` and logs a warning.
+- **Cost per helper**: `write_call<T, 5>` / `write_jmp` = 14 B, `write_call<T, 6>` = 8 B, `write_vfunc` / `write_detour*` = 0.
+- **Forbidden**: `SKSE::AllocTrampoline`. It is deprecated in CommonLib v16, and since v10.1.0 only the *first* call is honored. Helpers must never reserve space themselves; they only check it (`Hook::stl::detail::EnsureHookSpace`, which fails with a message naming the calling `Install()`) and consume it.
+- **Startup report**: `Install_Hooks()` ends with `[Hooks] hook space: <used> / <capacity> B used (<pct>%), SKSE trampoline interface: <yes|no>` and warns above 75%.
+
+**Adding a hook**:
+
+1. Install it from `Install_Hooks()`, or from a hook that runs later, as `WndProcHook` does.
+2. If it uses the trampoline, bump `kCallHookCount`, or adjust the byte math for 6-byte patches. If the `static_assert` fires, raise `kHookSpaceBytes`.
+3. Log `spdlog::info("[Hooks] <Name> installed")` after the patch is written.
+4. Add it to the table above and to `docs/TEST_MATRIX.md` section 0.
+
+> History: commit `6188de8` (#64) removed the old upfront `AllocTrampoline(64)`. It went unnoticed until the CommonLib update to v10.1.0 (`8aaf4bb`) made repeated reservation requests no-ops, after which the second call hook failed with `Trampoline.cpp(164): Failed to handle allocation request`. See `specs/001-fix-trampoline-allocation/`.
+
+### Animation events
+
+`PlayerAnimGraphHook` patches the player's `BSTEventSink<BSAnimationGraphEvent>::ProcessEvent` (`RE::VTABLE_PlayerCharacter[2]`, slot 1). After calling the original handler, its thunk calls `AnimListener::HandleAnimEvent` (`include/Adapters/Inbound/AnimEventAdapter.h`), which forwards the event tag to `Application::SpellSystemController::NotifyAnimEvent`.
+
+`AnimEventAdapter` is a stateless free function and needs **no instance and no `AddEventSink` registration**. Registering it as an event sink as well would deliver every animation event twice.
 
 ---
 
