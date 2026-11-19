@@ -461,8 +461,7 @@ namespace {
         constexpr float kCanvasSize = 200.f;
         constexpr float kRadius = 80.f;
 
-        ImGuiMCP::ImVec2 origin{};
-        ImGuiMCP::GetCursorScreenPos(&origin);
+        const ImGuiMCP::ImVec2 origin = ImGuiMCP::GetCursorScreenPos();
         const ImGuiMCP::ImVec2 center = {origin.x + kCanvasSize * 0.5f, origin.y + kCanvasSize * 0.5f};
         const ImGuiMCP::ImVec2 canvasEnd = {origin.x + kCanvasSize, origin.y + kCanvasSize};
 
@@ -1419,8 +1418,7 @@ void __stdcall IntegratedMagic::MENU::DrawSettings() {
 
     {
         constexpr float kButtonWidth = 160.0f;
-        ImGuiMCP::ImVec2 region{};
-        ImGuiMCP::GetContentRegionAvail(&region);
+        const ImGuiMCP::ImVec2 region = ImGuiMCP::GetContentRegionAvail();
         const float rightEdge = ImGuiMCP::GetCursorPosX() + region.x;
         ImGuiMCP::SetCursorPosX(rightEdge - kButtonWidth);
         ImGuiMCP::BeginDisabled(!g_pending);
