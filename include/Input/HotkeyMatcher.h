@@ -36,17 +36,23 @@ namespace Input::detail {
         });
     }
 
+    // First held code that breaks exclusivity for `combo` (not in it, not an allowed extra), or -1 if none.
     template <class DownArr, class AllowedFn>
-    [[nodiscard]] bool ComboExclusiveNow(const std::array<int, 3>& combo, const DownArr& down,
-                                         AllowedFn isAllowedExtra) {
-        if (!AnyEnabled(combo)) return false;
+    [[nodiscard]] int FindExtraHeldCode(const std::array<int, 3>& combo, const DownArr& down,
+                                        AllowedFn isAllowedExtra) {
         for (int code = 0; code < kMaxCode; ++code) {
             if (!down[static_cast<std::size_t>(code)].load(std::memory_order_relaxed)) continue;
             if (ComboContains(combo, code)) continue;
             if (isAllowedExtra(code)) continue;
-            return false;
+            return code;
         }
-        return true;
+        return -1;
+    }
+
+    template <class DownArr, class AllowedFn>
+    [[nodiscard]] bool ComboExclusiveNow(const std::array<int, 3>& combo, const DownArr& down,
+                                         AllowedFn isAllowedExtra) {
+        return AnyEnabled(combo) && FindExtraHeldCode(combo, down, isAllowedExtra) < 0;
     }
 
     void LoadHotkeyCache_FromConfig(HotkeyCacheStore& cache, SlotEdgeStore& slots);

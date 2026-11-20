@@ -129,6 +129,20 @@ Validar com o build **DEBUG** e acompanhar as linhas `[FLOW] SkipChanneling:` no
 - [ ] **6.6** Replay system — tecla segurada atravessando a janela de timing → evento não é perdido
 - [ ] **6.7** Teclado vs Gamepad — mesmo slot com combos de KB e GP → ambos funcionam
 
+Roda do mouse × hotkeys (spec `specs/003-fix-mouse-wheel-hotkeys/`):
+
+- [x] **6.8** `requireExclusiveHotkey` ON — zoom da câmera com a roda → hotkey do slot ativa no 1º toque
+- [x] **6.9** `requireExclusiveHotkey` ON — scroll no QuickLoot IE (>1 item) → hotkey ativa
+- [x] **6.10** `requireExclusiveHotkey` ON — vários scrolls nos dois sentidos + alternar 1ª/3ª pessoa → todos os
+  slots ativam, sem abrir menu
+- [x] **6.11** `requireExclusiveHotkey` ON — segurar slot Hold e rolar a roda → o cast continua até soltar a tecla.
+  Rolar entre e durante o aperto de `Shift + 5` → o slot ativa
+- [x] **6.12** Captura de hotkey — rolar a roda durante a captura → a roda não é gravada
+- [x] **6.13** `requireExclusiveHotkey` OFF — passos do 1º relato (zoom, alternar 1ª/3ª pessoa, teclas 1–4) → 10/10
+  ativam. Falha = segunda causa, abrir spec separada
+- [x] **6.14** `requireExclusiveHotkey` ON — segurar tecla fora do combo (ex.: `G`) e apertar o slot → não ativa, e o
+  log mostra `REFUSED (not exclusive) extra=kb:0x22` uma vez
+
 ---
 
 ## 7. Snapshot / Restore (equipamento prévio)

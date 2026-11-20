@@ -9,6 +9,14 @@
 
 namespace Input::detail {
 
+    namespace {
+        // A keyboard/mouse combo code that is a mouse wheel direction. The wheel is not a supported hotkey input
+        // (spec 003, Clarification Q1); a hand-edited combo with it is kept but can never complete (research R5).
+        [[maybe_unused]] bool IsWheelCode(int code) {
+            return code >= kMouseButtonBase && IsMouseWheelId(code - kMouseButtonBase);
+        }
+    }
+
     void LoadHotkeyCache_FromConfig(HotkeyCacheStore& cache, SlotEdgeStore& slots) {
         const auto& bindings = IntegratedMagic::Config::MagicConfigAdapter::Get();
         const auto n = bindings.SlotCount();
@@ -34,11 +42,27 @@ namespace Input::detail {
             slots.slotIsMultiKey[s] = (kbKeys > 1) || (gpKeys > 1);
             MAGIC_DEBUG_LOG("[Input] LoadHotkeyCache: slot={} kb=[{},{},{}] gp=[{},{},{}] isMultiKey={}", i, hk.kb[0],
                             hk.kb[1], hk.kb[2], hk.gp[0], hk.gp[1], hk.gp[2], slots.slotIsMultiKey[s]);
+            for (const int c : hk.kb) {
+                if (IsWheelCode(c)) {
+                    MAGIC_DEBUG_LOG(
+                        "[Input] HotkeyCache: slot={} combo contains the mouse wheel (code={}), not supported; "
+                        "this combo cannot activate",
+                        i, c);
+                }
+            }
         }
 
         const auto hudBinding = bindings.GetHudToggleBinding();
         cache.hud.kb = hudBinding.kb;
         cache.hud.gp = hudBinding.gp;
+        for (const int c : cache.hud.kb) {
+            if (IsWheelCode(c)) {
+                MAGIC_DEBUG_LOG(
+                    "[Input] HotkeyCache: slot=hud combo contains the mouse wheel (code={}), not supported; "
+                    "this combo cannot activate",
+                    c);
+            }
+        }
     }
 
     void LoadModifierBinding_FromConfig(int& kbCode, int& gpCode) {

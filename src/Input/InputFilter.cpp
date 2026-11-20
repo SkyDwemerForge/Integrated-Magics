@@ -61,6 +61,34 @@ namespace Input::detail {
                 keys.gpDown[static_cast<std::size_t>(convertedCode)].store(downNow, std::memory_order_relaxed);
         }
 
+        // The wheel sends a press with no release, so it is never a held input nor a hotkey; ProcessButtonEvents
+        // skips it before capture and before any held-input write (spec 003, research R2). Logged once per session.
+        void NoteWheelIgnored([[maybe_unused]] const RE::ButtonEvent* btn, [[maybe_unused]] int id) {
+            static bool s_logged = false;
+            if (s_logged) return;
+            s_logged = true;
+            MAGIC_DEBUG_LOG(
+                "[Input] ProcessButtonEvents: mouse wheel ignored for hotkeys (id={} value={:.2f} heldSecs={:.3f})", id,
+                btn->Value(), btn->HeldDuration());
+        }
+
+        // Mouse ids 5..7 have no Windows key state, so the stuck-key recovery uses the last pressed event (down or
+        // held) as a heartbeat. A held event never re-marks the button as down (spec 003, research R6).
+        void RecordMouseHeartbeat(const RE::ButtonEvent* btn, KeyStateStore& keys) {
+            if (btn->GetDevice() != RE::INPUT_DEVICE::kMouse) return;
+            const int id = static_cast<int>(btn->GetIDCode());
+            if (IsMouseNoVkId(id) && btn->IsPressed())
+                keys.mouseNoVkLastPressedMs[static_cast<std::size_t>(id - kMouseFirstNoVkId)] = SteadyNowMs();
+
+            // Premise check for the heartbeat: held events must reach this hook (research R6, T018 step 1).
+            static bool s_heldLogged = false;
+            if (!s_heldLogged && btn->IsHeld()) {
+                s_heldLogged = true;
+                MAGIC_DEBUG_LOG("[Input] ProcessButtonEvents: first held mouse event seen (id={} heldSecs={:.3f})", id,
+                                btn->HeldDuration());
+            }
+        }
+
         bool TryHandleCapture(const RE::ButtonEvent* btn, CaptureState& cap, bool& wantCapture, RE::INPUT_DEVICE dev,
                               int convertedCode) {
             if (!wantCapture || !btn->IsDown()) return false;
@@ -219,13 +247,19 @@ namespace Input::detail {
         auto* player = RE::PlayerCharacter::GetSingleton();
         for (auto* e = *a_evns; e; e = e->next) {
             const auto* btn = e->AsButtonEvent();
-            if (!btn || (!btn->IsDown() && !btn->IsUp())) continue;
+            if (!btn) continue;
+            RecordMouseHeartbeat(btn, keys);
+            if (!btn->IsDown() && !btn->IsUp()) continue;
 
             const auto dev = btn->GetDevice();
             auto code = static_cast<int>(btn->GetIDCode());
             if (dev == RE::INPUT_DEVICE::kGamepad) code = GamepadIdToIndex(code);
 
             if (dev == RE::INPUT_DEVICE::kMouse) {
+                if (IsMouseWheelId(code)) {
+                    NoteWheelIgnored(btn, code);
+                    continue;
+                }
                 const int mouseCode = kMouseButtonBase + code;
                 if (mouseCode >= 0 && mouseCode < kMaxCode) {
                     (void)TryHandleCapture(btn, cap, wantCapture, RE::INPUT_DEVICE::kMouse, mouseCode);
@@ -326,8 +360,10 @@ namespace Input::detail {
                 auto code = static_cast<int>(btn->GetIDCode());
                 const auto rawCode = btn->GetIDCode();
                 if (dev == RE::INPUT_DEVICE::kGamepad) code = GamepadIdToIndex(code);
+                // Wheel events always reach the game: never withheld, retained or replayed (spec 003, R3).
+                const bool isWheel = dev == RE::INPUT_DEVICE::kMouse && IsMouseWheelId(code);
 
-                if (code >= 0 && code < kMaxCode) {
+                if (!isWheel && code >= 0 && code < kMaxCode) {
                     remove = ShouldFilterAndSave(dev, code, rawCode, btn->QUserEvent(), btn->Value(),
                                                  btn->HeldDuration(), keys, slots, cache, excl, replay, retained) ||
                              ShouldFilterHudToggle(dev, code, cache);

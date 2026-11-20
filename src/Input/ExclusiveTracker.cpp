@@ -1,5 +1,7 @@
 #include "Input/ExclusiveTracker.h"
 
+#include <format>
+#include <string>
 #include <utility>
 
 #include "Input/HotkeyMatcher.h"
@@ -25,11 +27,24 @@ namespace Input::detail {
             }
         }
 
+        // Log label for a held input code: kb:0x<scan>, mouse:<id> or gp:<index> (spec 003, research R7).
+        [[maybe_unused]] std::string DescribeHeldCode(int code, bool gamepad) {
+            if (code < 0) return "none";
+            if (gamepad) return std::format("gp:{}", code);
+            if (code >= kMouseButtonBase) return std::format("mouse:{}", code - kMouseButtonBase);
+            return std::format("kb:{:#04x}", code);
+        }
+
         bool ComputeAcceptedExclusive(int slot, const SlotHotkeys& hk, bool prevAccepted, bool kbNow, bool gpNow,
                                       bool rawNow, float dt, ExclusiveStore& excl, SlotEdgeStore& slots,
                                       const KeyStateStore& keys, ReplayArr& replay, RetainedArr& retained,
                                       DeferredVec& deferred, const IntegratedMagic::Config::IPatchSettings& patches) {
             const auto s = static_cast<std::size_t>(slot);
+
+            // Rising edge of the raw combo, read before the previous state is overwritten: an exclusive refusal is
+            // logged once per press, not every frame (spec 003, research R7).
+            const bool kbRose = kbNow && !excl.prevRawKbDown[s];
+            const bool gpRose = gpNow && !excl.prevRawGpDown[s];
 
             excl.prevRawKbDown[s] = kbNow;
             excl.prevRawGpDown[s] = gpNow;
@@ -75,13 +90,16 @@ namespace Input::detail {
                 const bool simPatch = patches.PressBothAtSame() && srcIsMulti;
 
                 if (requireExcl) {
-                    const bool stillExcl =
-                        (src == PendingSrc::Kb)
-                            ? ComboExclusiveNow(hk.kb, keys.kbDown, IsAllowedExtra_Keyboard_MoveOrCamera)
-                            : ComboExclusiveNow(hk.gp, keys.gpDown, IsAllowedExtra_Gamepad_MoveOrCamera);
+                    const bool srcIsKb = (src == PendingSrc::Kb);
+                    const int extra = srcIsKb
+                                          ? FindExtraHeldCode(hk.kb, keys.kbDown, IsAllowedExtra_Keyboard_MoveOrCamera)
+                                          : FindExtraHeldCode(hk.gp, keys.gpDown, IsAllowedExtra_Gamepad_MoveOrCamera);
+                    const bool stillExcl = AnyEnabled(srcIsKb ? hk.kb : hk.gp) && extra < 0;
                     if (!stillExcl) {
                         MAGIC_DEBUG_LOG(
-                            "[Input] ComputeAcceptedExclusive: slot={} pending CANCELLED (no longer exclusive)", slot);
+                            "[Input] ComputeAcceptedExclusive: slot={} pending CANCELLED (no longer exclusive) "
+                            "extra={}",
+                            slot, DescribeHeldCode(extra, !srcIsKb));
 
                         ClearExclusivePending(s, ClearReason::Cancelled, excl, replay, retained, deferred);
                         return false;
@@ -202,6 +220,12 @@ namespace Input::detail {
                     excl.fullComboSeen[s] = false;
                     return false;
                 }
+                if (kbRose) {
+                    MAGIC_DEBUG_LOG(
+                        "[Input] ComputeAcceptedExclusive: slot={} kb REFUSED (not exclusive) extra={}", slot,
+                        DescribeHeldCode(FindExtraHeldCode(hk.kb, keys.kbDown, IsAllowedExtra_Keyboard_MoveOrCamera),
+                                         false));
+                }
             }
 
             if (gpNow) {
@@ -218,6 +242,12 @@ namespace Input::detail {
                     excl.pendingTimer[s] = kFilterReplayDelaySec;
                     excl.fullComboSeen[s] = false;
                     return false;
+                }
+                if (gpRose) {
+                    MAGIC_DEBUG_LOG(
+                        "[Input] ComputeAcceptedExclusive: slot={} gp REFUSED (not exclusive) extra={}", slot,
+                        DescribeHeldCode(FindExtraHeldCode(hk.gp, keys.gpDown, IsAllowedExtra_Gamepad_MoveOrCamera),
+                                         true));
                 }
             }
 
