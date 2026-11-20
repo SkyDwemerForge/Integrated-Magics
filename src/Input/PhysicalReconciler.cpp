@@ -1,7 +1,5 @@
 #include "Input/PhysicalReconciler.h"
 
-#include <chrono>
-
 #include "Config/InputConstants.h"
 #include "Input/ExclusiveTracker.h"
 #include "PCH.h"
@@ -11,9 +9,7 @@ namespace Input::detail {
     void ReconcilePhysicalKeyState(KeyStateStore& keys, SlotEdgeStore& slots, ExclusiveStore& excl, ReplayArr& replay,
                                    RetainedArr& retained, DeferredVec& deferred, bool spellSystemActive) {
         static std::uint64_t s_nextRunMs = 0;
-        const auto now = static_cast<std::uint64_t>(
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
-                .count());
+        const auto now = Input::SteadyNowMs();
         if (now < s_nextRunMs) return;
         s_nextRunMs = now + 200;
 
@@ -43,6 +39,18 @@ namespace Input::detail {
             const auto i = static_cast<std::size_t>(idx);
             if (!keys.kbDown[i].load(std::memory_order_relaxed)) continue;
             if (!(GetAsyncKeyState(vk) & 0x8000)) {
+                keys.kbDown[i].store(false, std::memory_order_relaxed);
+                clearedAny = true;
+            }
+        }
+
+        // Mouse ids 5..7 have no Windows key state: released when no pressed event arrived for the heartbeat timeout
+        // (spec 003, research R6).
+        for (int id = kMouseFirstNoVkId; id <= kMouseLastNoVkId; ++id) {
+            const auto i = static_cast<std::size_t>(kMouseButtonBase + id);
+            if (!keys.kbDown[i].load(std::memory_order_relaxed)) continue;
+            const auto last = keys.mouseNoVkLastPressedMs[static_cast<std::size_t>(id - kMouseFirstNoVkId)];
+            if (now - last > static_cast<std::uint64_t>(kMouseHeartbeatTimeoutMs)) {
                 keys.kbDown[i].store(false, std::memory_order_relaxed);
                 clearedAny = true;
             }

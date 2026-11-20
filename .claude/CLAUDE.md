@@ -213,6 +213,16 @@ For `Automatic` (and `Hold` with `wantAutoAttack`), the plugin drives the cast v
 `include/Input/` — all stateless-ish stores, no singletons.
 
 **`KeyStateStore`** — atomic `bool[kMaxCode]` tracking which keys are currently down. Updated by `PollInputDevicesHook` each frame.
+- **Mouse codes**: stored as `kMouseButtonBase + id` (256 + `RE::BSWin32MouseDevice::Keys`).
+- **The wheel (ids 8 and 9) is never recorded.** The game sends a press with no release, and the wheel is not a hotkey input. `ProcessButtonEvents` skips it before hotkey capture and before any write, and `FilterEvents` always passes it to the game. See `specs/003-fix-mouse-wheel-hotkeys/`.
+- **`mouseNoVkLastPressedMs`**: the last pressed (down or held) event for mouse ids 5–7, which have no Windows key state. Main thread only.
+
+**Stuck-key recovery** — `ReconcilePhysicalKeyState` runs every 200 ms while no slot session and no exclusive press is pending. It clears inputs that are recorded as held but are no longer held:
+- keyboard and mouse ids 0–4: Windows key state (`GetAsyncKeyState`),
+- mouse ids 5–7: a 500 ms heartbeat (`kMouseHeartbeatTimeoutMs`),
+- gamepad: XInput.
+
+`ClearLikelyStuckKeysAfterMenuClose` also clears non-combo keys when a menu that blocks input closes.
 
 **`HotkeyCacheStore`** — cached hotkey combos (up to 3 keys per slot, keyboard + gamepad) loaded from config.
 
@@ -222,7 +232,7 @@ For `Automatic` (and `Hold` with `wantAutoAttack`), the plugin drives the cast v
 
 **`ExclusiveStore`** — tracks per-slot timing windows used by two optional patches (`MagicConfig`):
 
-- `requireExclusiveHotkeyPatch` — a slot only activates if *exactly* the keys in its combo are pressed and no others. Example: combo R1+L1 will not fire if R1+L1+R2 are all held simultaneously.
+- `requireExclusiveHotkeyPatch` — a slot only activates if *exactly* the keys in its combo are pressed and no others. Example: combo R1+L1 will not fire if R1+L1+R2 are all held simultaneously. Only W/A/S/D are allowed extras (keyboard). On gamepad no extra button is allowed; the sticks are not buttons, so they never count. A refusal is logged once per press with the culprit, `[Input] ComputeAcceptedExclusive: slot=<n> <kb|gp> REFUSED (not exclusive) extra=<kb:0x..|mouse:<id>|gp:<n>>` (`FindExtraHeldCode` in `HotkeyMatcher.h`). A cancelled pending press logs `pending CANCELLED ... extra=<label>`.
 - `pressBothAtSamePatch` — all keys in the combo must be pressed within a short time window of each other. Holding R1 for a long time and then pressing L1 will not activate the slot even though both are held. Key fields: `pendingSrc`, `pendingTimer`, `simWindowActive`, `simWindowRemaining`, `filterWindowActive`, `filterWindowTimer`, `deactivatedThisPress`, `fullComboSeen`.
 
 **`ReplaySystem`** (`ReplayArr`, `DeferredVec`, `RetainedArr`) — defers input events that arrive while a slot's timing window is active and replays them once the window closes, so a held key that spans the window is not lost.
@@ -302,7 +312,7 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 | Shout/power behavior | `include/Domain/State.h` (`ShoutState`), `src/Domain/MagicStatePump.cpp` (`OnShoutStop`) |
 | Skip channeling behavior | `src/Domain/MagicStatePump.cpp` (`PumpCastPhase` → SkipChanneling block, `PumpAutomatic` dual-cast pairing, `OnCasterInterrupt` `chargeSkipped` failure path, `OnSpellFired` magicka owed), `src/Adapters/Outbound/MagicEquip.cpp` (`ForceChargeComplete`, `DrainMagicka`), `src/Application/SpellSystemController.cpp` (`NotifyAnimEvent` → `DrainMagicka`) |
 | Skip equip animation | `include/Adapters/Outbound/MagicEquip.h` (`SetSkipEquipVars`, `ApplySkipEquipAnimReturn`) |
-| Hotkey not detected / double-firing | `include/Input/ExclusiveStore.h`, `src/Input/ExclusiveTracker.cpp` |
+| Hotkey not detected / double-firing | `include/Input/ExclusiveStore.h`, `src/Input/ExclusiveTracker.cpp`, `src/Input/InputFilter.cpp` (`ProcessButtonEvents`, `FilterEvents`), `src/Input/PhysicalReconciler.cpp` (stuck-key recovery). Check the log for `REFUSED (not exclusive) extra=` first |
 | Hotkey rebinding | `include/Input/CaptureState.h`, `Application::InputController::RequestHotkeyCapture()` |
 | HUD slot rendering | `include/UI/SlotDrawer.h`, `src/UI/SlotDrawer.cpp` |
 | Assignment popup | `include/UI/PopupDrawer.h`, `src/UI/PopupDrawer.cpp`, `IntegratedMagic::MagicAssign` |
