@@ -5,7 +5,7 @@ identificadas.
 
 ## 1. Bugs identificados
 
-### BUG-01 --- Teclas de atalho param de funcionar após utilizar o scroll do mouse
+### BUG-01 --- Teclas de atalho param de funcionar após utilizar o scroll do mouse (DONE)
 
 **Descrição:** Após movimentar a roda do mouse, as teclas de atalho
 configuradas para conjurar magias deixam de funcionar.
@@ -28,7 +28,7 @@ permanecendo como "pressionado", fazendo com que o sistema de hotkeys
 não processe corretamente as entradas seguintes. Essa hipótese ainda
 precisa ser confirmada.
 
-### BUG-02 --- Conflito de prioridade dos comandos em gamepads nos slots acima do quarto
+### BUG-02 --- Conflito de prioridade dos comandos em gamepads nos slots acima do quarto (DONE)
 
 **Descrição:** Ao utilizar um controle, as combinações de botões
 configuradas nos slots 5 ou superiores perdem prioridade para os
@@ -40,7 +40,7 @@ RT + B → executa o comando padrão de pular, em vez de conjurar a magia.
 **Comportamento esperado:** Todos os slots devem ter a mesma prioridade
 de entrada, independentemente de sua posição.
 
-### BUG-03 --- Interrupção e oscilação da conjuração com a mão esquerda
+### BUG-03 --- Interrupção e oscilação da conjuração com a mão esquerda (DONE)
 
 **Descrição:** A conjuração com a mão esquerda pode entrar em um estado
 instável, no qual a animação fica alternando ou sendo interrompida

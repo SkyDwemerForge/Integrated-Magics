@@ -237,8 +237,13 @@ gamepad (`LT`). `requireExclusiveHotkey` OFF, salvo indicação:
 - [ ] **10.4** Slot ativo recebe glow → visual correto
 - [ ] **10.5** Cooldown arc em spell/power → progresso correto
 - [ ] **10.6** Ícones de spell carregados (TextureManager) → exibidos
-- [ ] **10.7** Rebind de hotkey (CaptureState) → captura próxima tecla
+- [x] **10.7** Rebind de hotkey (CaptureState) → captura próxima tecla
 - [ ] **10.8** Labels de KB e GP nos slots → corretos
+- [x] **10.9** Captura de hotkey repetida (20× seguidas, teclado e gamepad, concluídas e canceladas com X) → o menu
+  do SKSE continua totalmente opaco; a página de outro mod no menu do SKSE fica normal (spec
+  `specs/006-fix-menu-capture-transparency/`)
+- [x] **10.10** "- Vertex", "Apply changes", botão "M", grade de âncora do HUD e cantos do rótulo, 10× cada → o menu
+  nunca desbota e cada controle mantém a aparência
 
 ---
 

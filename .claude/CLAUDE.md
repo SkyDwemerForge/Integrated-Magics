@@ -336,6 +336,11 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 
 **`SlotCooldownTracker`** (`include/Domain/SlotCooldownTracker.h`) — tracks per-slot cooldown progress for the HUD ring display.
 
+**SKSE menu pair rule** (`src/UI/MENU.cpp`, spec 006). The settings page draws into SKSE Menu Framework's **shared** ImGui context (`ImGuiMCP::`), so an unbalanced pair breaks the whole SKSE menu, other mods' pages included.
+- `BeginDisabled(cond)` / `EndDisabled()` are always an **unconditional** pair. Never guard them with two `if`s on a state the control in between can change: that is how the capture button made the menu fade with every capture (`specs/006-fix-menu-capture-transparency/`).
+- A conditional `PushStyleColor` / `PopStyleColor` (or `PushStyleVar` / `PopStyleVar`) pair tests one `const` local computed before its control.
+- `PushID` / `PopID` are unconditional, with no early `return` between them.
+
 ---
 
 ## Common tasks → files

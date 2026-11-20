@@ -105,13 +105,15 @@ namespace {
                 CancelFieldCapture();
             }
         } else {
-            if (g_fieldCapture.active) ImGuiMCP::BeginDisabled(true);
+            // Unconditional pair: the click below starts a capture and flips g_fieldCapture.active, so the end must not
+            // re-read it (spec 006, contract §1).
+            ImGuiMCP::BeginDisabled(g_fieldCapture.active);
             if (ImGuiMCP::SmallButton(IntegratedMagic::Strings::Get("Btn_Cap", "Cap").c_str())) {
                 g_fieldCapture = {&field, wantKeyboard, true};
                 CaptureState::Get().Request();
                 CaptureState::Get().captureActive.store(true, std::memory_order_relaxed);
             }
-            if (g_fieldCapture.active) ImGuiMCP::EndDisabled();
+            ImGuiMCP::EndDisabled();
         }
 
         if (cfg && rowPos > 0) {
