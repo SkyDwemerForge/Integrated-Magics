@@ -1,6 +1,7 @@
 #include "Input/InputFilter.h"
 
 #include <array>
+#include <optional>
 #include <ranges>
 #include <span>
 
@@ -277,6 +278,56 @@ namespace Input::detail {
             return true;
         }
 
+        // The hand whose attack/block action an event drives, by its user event: one rule for the mouse, gamepad
+        // triggers, keyboard binds and remaps (spec 005, research R2).
+        std::optional<IntegratedMagic::Hand> HandOfUserEvent(const RE::BSFixedString& ue) {
+            static const RE::BSFixedString kLeftAttackBlock{"Left Attack/Block"};
+            static const RE::BSFixedString kRightAttackBlock{"Right Attack/Block"};
+            if (ue == kLeftAttackBlock) return IntegratedMagic::Hand::Left;
+            if (ue == kRightAttackBlock) return IntegratedMagic::Hand::Right;
+            return std::nullopt;
+        }
+
+        HandEventPhase PhaseOf(float value, float heldSecs) {
+            if (value > 0.f) return heldSecs <= 0.f ? HandEventPhase::Press : HandEventPhase::Held;
+            return HandEventPhase::Release;
+        }
+
+        [[maybe_unused]] const char* HandName(IntegratedMagic::Hand h) {
+            return h == IntegratedMagic::Hand::Left ? "Left" : "Right";
+        }
+
+    }
+
+    bool GateHandEvent(const RE::BSFixedString& userEvent, float value, float heldSecs, HandButtonStore& hands,
+                       const HandGateFlags& flags) {
+        const auto hand = HandOfUserEvent(userEvent);
+        if (!hand) return false;
+        using enum IntegratedMagic::Hand;
+        const auto other = (*hand == Left) ? Right : Left;
+        const auto d = DecideHandEvent(hands.For(*hand), flags.PluginCast(*hand), flags.PluginCast(other),
+                                       flags.mayCancel, PhaseOf(value, heldSecs), heldSecs);
+        if (d.requestCancel) hands.cancelRequested = true;
+
+        switch (d.outcome) {
+            using enum HandGateOutcome;
+            case KeptCancel:
+                MAGIC_DEBUG_LOG("[Input] HandGate: {} press during plugin cast -> cancel session", HandName(*hand));
+                break;
+            case KeptIgnored:
+                MAGIC_DEBUG_LOG("[Input] HandGate: {} press during plugin cast -> ignored (Press mode)",
+                                HandName(*hand));
+                break;
+            case PassCancel:
+                MAGIC_DEBUG_LOG("[Input] HandGate: {} other-hand press -> passes, cancel session", HandName(*hand));
+                break;
+            case Cleared:
+                MAGIC_DEBUG_LOG("[Input] HandGate: {} button released -> gate cleared", HandName(*hand));
+                break;
+            default:
+                break;
+        }
+        return d.filter;
     }
 
     int EffectiveComboCode(RE::INPUT_DEVICE dev, std::uint32_t rawIdCode) {
@@ -430,7 +481,8 @@ namespace Input::detail {
     }
 
     void FilterEvents(RE::InputEvent** a_evns, const KeyStateStore& keys, const SlotEdgeStore& slots,
-                      const HotkeyCacheStore& cache, ExclusiveStore& excl, ReplayArr& replay, RetainedArr& retained) {
+                      const HotkeyCacheStore& cache, ExclusiveStore& excl, ReplayArr& replay, RetainedArr& retained,
+                      HandButtonStore& hands, const HandGateFlags& flags) {
         RE::InputEvent* prev = nullptr;
         RE::InputEvent* cur = *a_evns;
         while (cur) {
@@ -462,6 +514,9 @@ namespace Input::detail {
                     }
 #endif
                 }
+                // Only events that passed the combo rules reach the hand-button gate (spec 005, R3).
+                if (!remove && !isWheel)
+                    remove = GateHandEvent(btn->QUserEvent(), btn->Value(), btn->HeldDuration(), hands, flags);
             }
 
             if (remove) {

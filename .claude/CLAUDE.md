@@ -150,6 +150,7 @@ DXGIPresentHook → HudManager::DrawHudFrame()
 - `chargeSkipped` — Skip Channeling forced this hand's charge in the current attempt. An interruption while set is a real failure (finish + finalize, no retry), never "spurious". Reset by `FinishHand`, `RequestAutoAttackStart`, the post-cast spurious branch and every value reset of `HandMode`
 - `skipMagickaOwed` — Skip Channeling: the charge cost the game did not drain because the charge was skipped. Set with `chargeSkipped`, paid by `OnSpellFired` (`SpellFiredResult::magickaToDrain`), and reset in the same places as `chargeSkipped`, so a failed attempt costs nothing extra
 - `startRequestSecs` — time spent in `StartRequested` before timing out and retrying
+- `startFailSecs` — total time the current attempt has spent without a stable cast. Restarts do not reset it; `RequestAutoAttackStart`, `FinishHand`, every `HandMode` reset and a cast lasting `kSpuriousInterruptWindowSecs` (0.2 s) do. At `kMaxCastStartSecs` (1.0 s) the session ends (spec 005)
 - `castingElapsedSecs` — elapsed time since cast confirmed (Casting phase)
 - `waitingSpellFireFinalize` — waiting for spell fire event or caster idle to finalize
 - `spellFireFinalizeSecs` — time since spell fire finalize was scheduled
@@ -196,6 +197,7 @@ For `Automatic` (and `Hold` with `wantAutoAttack`), the plugin drives the cast v
 1. **StartRequested** — attack button held DOWN. Waits for caster to reach `kUnk02` (stable charging state).  
    - If interrupted by a spurious `OnCasterInterrupt` (pre-cast noise): releases UP, sets `pendingRestartNextFrame`. On the next frame, goes DOWN again.
    - If `kRedispatchInterval` (0.15 s) elapses without progress: same UP → DOWN restart.
+   - **Retry bound**: when a plugin-cast hand's `startFailSecs` reaches `kMaxCastStartSecs` (1.0 s), `PumpAutomatic` ends the session through `ForceExit` (the same exit as the 30 s timeout), before pumping the cast phases. Log: `PumpAutomatic: hand=<L|R> cast did not start in <s>s -> ForceExit`. See `specs/005-fix-left-hand-block/`.
    - **Dual-cast sync**: in dual-cast mode, whenever one hand restarts, the other is also released so both hands go DOWN together on the same frame — required for the game's behavior machine to stay in dual-cast mode.
 2. **Casting** — caster reached `kUnk02`. Accumulates `castingElapsedSecs`. Waits for `IsChargeComplete`.  
    - `SkipChanneling` patch (Automatic, or Press with auto-attack): once per attempt, when the caster is in `kUnk02` and the slot spell is classified `Cast` or `Bound` (`DetectSpellType`) with charge time > 0, the domain emits `forceChargeComplete`. `SpellSystemController` then calls `MagicAction::ForceChargeComplete`, which zeroes `castingTimer`.
@@ -203,6 +205,7 @@ For `Automatic` (and `Hold` with `wantAutoAttack`), the plugin drives the cast v
      - **Dual cast**: `PumpCastPhase` only reports `chargeSkipEligible`, and `PumpAutomatic` forces both hands in the same frame, or neither.
      - **Failure**: an interruption after the skip ends the hand(s) with no retry.
      - See `specs/002-fix-skip-channeling-bound/`.
+   - **Real interruption** (cast longer than `kSpuriousInterruptWindowSecs`): `OnCasterInterrupt` calls `FinishAndFinalize` for the hand, and for its dual-cast partner. That is `FinishHand` + `ScheduleSpellFireFinalize`, so the session ends and the gear comes back once nothing is left. Before spec 005 the hand was only finished, and the slot stayed active until the 30 s timeout (Automatic) or the hotkey release (Hold). Log: `OnCasterInterrupt: hand=<..> real interrupt -> finish + finalize session`.
 3. **WaitingChargeRelease** — charge detected as complete. Attack button released UP. Spell fires.
 4. **Done** — `OnSpellFired` received; `FinishHand` called; session exits.
 
@@ -260,6 +263,20 @@ For `Automatic` (and `Hold` with `wantAutoAttack`), the plugin drives the cast v
 - `HoldBack: <label> held for slot=… / consumed by slot=… / handed to game (slot=…)`
 - `HoldBack: slot=… window extended (slot=… pending|chord|complete)`
 - `RecomputeSlotEdges: slot=… SUPPRESSED by slot=…`
+
+**Hand-button gate** (`include/Input/HandButtonStore.h`, `GateHandEvent` in `src/Input/InputFilter.cpp`; see `specs/005-fix-left-hand-block/`). The plugin casts a hand with the same game action the player's button sends (`"Left Attack/Block"` = right mouse button / `LT`, `"Right Attack/Block"` = left mouse button / `RT`), so the two must not mix.
+- **Where it runs**: on events of those user events that would reach the game: in `FilterEvents` **after** the combo rules (so combo presses such as the `RT` modifier are never gated), and on replays before `InputController` injects them.
+- **Flags**: `InputController` builds `HandGateFlags` from `MagicState::IsHandPluginCast(hand)` each frame. A hand is plugin-cast when its session is active and it is `!finished && (autoActive || (holdActive && wantAutoAttack))`. `mayCancel` is "a hand plugin-cast && `!IsPressMode()`", the same rule as `blockStart`.
+- **Rules** (`DecideHandEvent`):
+  - a fresh press of a **plugin-cast hand** is kept from the game; it cancels in Hold/Automatic and is ignored in Press;
+  - a fresh press of the **other hand** (for example a shield) reaches the game and cancels in Hold/Automatic;
+  - a kept press stays kept until its release, even after the session;
+  - a fresh press always starts a new fate.
+- **Takeover** (`SpellSystemController::DispatchAttackPress`, every synthetic press): for each hand whose action the game sees held by the player (`HandButtonState::gameHeld`), a release is dispatched first and that press is kept until released. This is what lowers a shield held up before a slot.
+- **Cancel**: the gate sets `HandButtonStore::cancelRequested`. `SpellSystemController::OnFrame` → `ConsumeInputExitRequests` runs `ForceExit` (unless `IsPressMode()`) before `DispatchSlotEvents`. The same function consumes the transform-shout `ConsumeForceExit()`, which had no caller before spec 005.
+- **Resets**: `ResetInputState` (game load) clears the store. Menu close clears both hands and the pending cancel.
+- **Require exclusive hotkey** is unchanged: a held block button still counts as an extra key.
+- **Logs**: `HandGate: <hand> press during plugin cast -> cancel session | ignored (Press mode)`, `other-hand press -> passes, cancel session`, `button taken at cast start -> released in game`, `button released -> gate cleared`, `[SpellSystem] HandGate cancel -> ForceExit`.
 
 **`CaptureState`** — captures the next keypress for hotkey rebinding. Activated via `InputController::RequestHotkeyCapture()`, polled via `PollCapturedHotkey()`.
 
@@ -337,6 +354,7 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 | Skip channeling behavior | `src/Domain/MagicStatePump.cpp` (`PumpCastPhase` → SkipChanneling block, `PumpAutomatic` dual-cast pairing, `OnCasterInterrupt` `chargeSkipped` failure path, `OnSpellFired` magicka owed), `src/Adapters/Outbound/MagicEquip.cpp` (`ForceChargeComplete`, `DrainMagicka`), `src/Application/SpellSystemController.cpp` (`NotifyAnimEvent` → `DrainMagicka`) |
 | Skip equip animation | `include/Adapters/Outbound/MagicEquip.h` (`SetSkipEquipVars`, `ApplySkipEquipAnimReturn`) |
 | Hotkey not detected / double-firing | `include/Input/ExclusiveStore.h`, `src/Input/ExclusiveTracker.cpp`, `src/Input/InputFilter.cpp` (`ProcessButtonEvents`, `FilterEvents`), `src/Input/PhysicalReconciler.cpp` (stuck-key recovery). Check the log for `REFUSED (not exclusive) extra=` first. For shared buttons or a game action leaking during a combo, check the `HoldBack:` lines (`specs/004-fix-gamepad-slot-priority/`) |
+| Block / attack button breaking a cast (twitching, slot not ending, a hand stuck after blocking) | `include/Input/HandButtonStore.h`, `src/Input/InputFilter.cpp` (`GateHandEvent`), `src/Application/InputController.cpp` (`BuildHandGateFlags`, `TakeHeldHandButtons`), `src/Application/SpellSystemController.cpp` (`DispatchAttackPress`, `ConsumeInputExitRequests`), `src/Domain/MagicStatePump.cpp` (`OnCasterInterrupt`, `PumpAutomatic` retry bound). Check the `HandGate:` lines (`specs/005-fix-left-hand-block/`) |
 | Hotkey rebinding | `include/Input/CaptureState.h`, `Application::InputController::RequestHotkeyCapture()` |
 | HUD slot rendering | `include/UI/SlotDrawer.h`, `src/UI/SlotDrawer.cpp` |
 | Assignment popup | `include/UI/PopupDrawer.h`, `src/UI/PopupDrawer.cpp`, `IntegratedMagic::MagicAssign` |

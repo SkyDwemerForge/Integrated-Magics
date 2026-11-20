@@ -1,5 +1,6 @@
 #pragma once
 #include "Input/ExclusiveStore.h"
+#include "Input/HandButtonStore.h"
 #include "Input/HotkeyCacheStore.h"
 #include "Input/KeyStateStore.h"
 #include "Input/ReplaySystem.h"
@@ -18,7 +19,12 @@ namespace Input::detail {
                                                                 bool& wantCapture, KeyStateStore& keys);
     void FilterMouseForPopup(RE::InputEvent** a_evns);
     void FilterEvents(RE::InputEvent** a_evns, const KeyStateStore& keys, const SlotEdgeStore& slots,
-                      const HotkeyCacheStore& cache, ExclusiveStore& excl, ReplayArr& replay, RetainedArr& retained);
+                      const HotkeyCacheStore& cache, ExclusiveStore& excl, ReplayArr& replay, RetainedArr& retained,
+                      HandButtonStore& hands, const HandGateFlags& flags);
+    // Hand-button gate for an event of a hand's attack/block action (spec 005, R3/R4). Returns true to keep the event
+    // from the game. Events of other actions always return false.
+    [[nodiscard]] bool GateHandEvent(const RE::BSFixedString& userEvent, float value, float heldSecs,
+                                     HandButtonStore& hands, const HandGateFlags& flags);
     void UpdateSlotsIfAllowed(bool blocked, float dt, SlotEdgeStore& slots, ExclusiveStore& excl,
                               const HotkeyCacheStore& cache, const KeyStateStore& keys, RetainedArr& retained,
                               DeferredVec& deferred, ReplayArr& replay, bool spellSystemActive, int activeSlot);

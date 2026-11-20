@@ -3,6 +3,7 @@
 #include <optional>
 
 #include "Input/ExclusiveStore.h"
+#include "Input/HandButtonStore.h"
 #include "Input/HotkeyCacheStore.h"
 #include "Input/KeyStateStore.h"
 #include "Input/ReplaySystem.h"
@@ -24,6 +25,15 @@ namespace Application {
         [[nodiscard]] std::optional<int> ConsumePressedSlot();
         [[nodiscard]] std::optional<int> ConsumeReleasedSlot();
         [[nodiscard]] std::optional<IntegratedMagic::StateExitResult> ConsumeForceExit();
+
+        // Hand-button gate (spec 005). A fresh attack/block press asked to end the session (R6).
+        [[nodiscard]] bool ConsumeHandCancelRequest() noexcept;
+        struct TakenHandButtons {
+            std::optional<float> left;
+            std::optional<float> right;
+        };
+        // At the plugin's first press: the held attack/block buttons the game sees, now kept until released (R5).
+        [[nodiscard]] TakenHandButtons TakeHeldHandButtons();
 
         [[nodiscard]] std::optional<int> GetDownSlotForSelection() const;
         [[nodiscard]] bool IsSlotHotkeyDown(int slot) const;
@@ -66,6 +76,8 @@ namespace Application {
         Input::detail::RetainedArr m_retained{};
         Input::detail::DeferredVec m_deferred{};
         std::optional<IntegratedMagic::StateExitResult> m_pendingForceExit{};
+        Input::HandButtonStore m_handButtons{};
+        Input::HandGateFlags m_handFlags{};
         float m_lastDt{0.f};
 
         static float CalculateDeltaTime();

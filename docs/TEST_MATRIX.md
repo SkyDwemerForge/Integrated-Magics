@@ -183,7 +183,7 @@ Gamepad × slots compartilhando botões (spec `specs/004-fix-gamepad-slot-priori
 
 ## 8. Interrupções e saídas forçadas
 
-- [ ] **8.1** `blockStart` / `BashExit` (não-Press) → ForceExit + restore
+- [x] **8.1** `blockStart` / `BashExit` (não-Press) → ForceExit + restore
 - [ ] **8.2** `staggerStart` / `KnockDown` → ForceExit + restore
 - [ ] **8.3** Morte do jogador → ForceExit
 - [ ] **8.4** Abrir menu (Inventory, Magic, Map, etc.) → ForceExit
@@ -191,6 +191,30 @@ Gamepad × slots compartilhando botões (spec `specs/004-fix-gamepad-slot-priori
 - [ ] **8.6** Equip estrangeiro (outro mod equipa algo) → ForceExitNoRestore
 - [ ] **8.7** Timeout (>30s travado) → ForceExit automático
 - [ ] **8.8** Trocar de slot enquanto um está ativo → PrepareForOverwrite + ativa o novo
+
+Botão de ataque/defesa × slots (spec `specs/005-fix-left-hand-block/`). Testar em teclado/mouse (botão direito) e
+gamepad (`LT`). `requireExclusiveHotkey` OFF, salvo indicação:
+
+- [x] **8.9** Defesa segurada (escudo, e depois arma de uma mão na esquerda) → ativar slot de mão esquerda
+  (Hold/Automatic) → a defesa baixa, a magia sai, sem tremer; log `button taken at cast start`
+- [x] **8.10** Defesa segurada → ativar slot de mão direita → o escudo baixa e a magia sai. Com
+  `requireExclusiveHotkey` ON → slot recusado, log `REFUSED (not exclusive) extra=mouse:1` (ou `gp:`)
+- [x] **8.11** Slot de mão esquerda em Hold/Automatic: apertar/segurar a defesa durante o cast → a sessão cancela, o
+  equipamento volta; só defende ao reapertar. Log `press during plugin cast -> cancel session`
+- [x] **8.12** Slot de mão esquerda em Press com auto-ataque: apertar a defesa → sem efeito, a magia sai. Log
+  `ignored (Press mode)`
+- [x] **8.13** Cliques rápidos na defesa durante 8.11 e 8.12 → sem tremer, mesmo resultado
+- [x] **8.14** Slot de mão direita com escudo: defesa durante Hold/Automatic → o slot encerra na hora e o personagem
+  defende sem reapertar (log `other-hand press -> passes, cancel session`); em Press o aperto não cancela
+- [x] **8.15** Dual cast com 8.9 e 8.11 → um único dual cast ou cancelamento limpo, nunca dois casts simples
+- [x] **8.16** Sem estado preso: depois de 8.9–8.14, 10 ativações sem tocar na defesa conjuram de primeira; botão
+  tomado e ainda segurado depois do fim da sessão não faz nada até ser reapertado
+- [x] **8.17** Cast interrompido pelo jogo nunca deixa o slot ativo (nenhum Automatic fica ativo por 30 s). Log
+  `real interrupt -> finish + finalize session`
+- [x] **8.18** Ativar slot no início de um pulo → conjura ao pousar, ou a sessão termina em ~1 s com o equipamento de
+  volta. Log `cast did not start in ... -> ForceExit`
+- [x] **8.19** Sem sessão: defesa, bash e cast manual da mão esquerda como no vanilla (sem linhas `HandGate`); cast
+  manual em Press sem auto-ataque continua funcionando
 
 ---
 
