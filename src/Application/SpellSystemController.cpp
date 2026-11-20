@@ -32,6 +32,7 @@ namespace Application {
     }
 
     void SpellSystemController::OnFrame(float dt, bool inputBlocked) const {
+        ConsumeInputExitRequests();
         DispatchSlotEvents();
 
         if (!inputBlocked) {
@@ -92,11 +93,11 @@ namespace Application {
 
             if (autoResult.startLeftAttack) {
                 MAGIC_DEBUG_LOG("[FLOW] OnFrame: start Left (DOWN only, rising edge)");
-                IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Left, 1.0f, 0.0f);
+                DispatchAttackPress(IntegratedMagic::Hand::Left);
             }
             if (autoResult.startRightAttack) {
                 MAGIC_DEBUG_LOG("[FLOW] OnFrame: start Right (DOWN only, rising edge)");
-                IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Right, 1.0f, 0.0f);
+                DispatchAttackPress(IntegratedMagic::Hand::Right);
             }
 
             if (autoResult.stopLeftAttack) {
@@ -166,11 +167,11 @@ namespace Application {
                                 eqResult.dispatchLeft, eqResult.dispatchRight);
                 if (eqResult.dispatchLeft) {
                     MAGIC_DEBUG_LOG("[SpellSystem] DispatchSlotEvents: → DispatchAttack Left 1.0 (equip)");
-                    IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Left, 1.0f, 0.0f);
+                    DispatchAttackPress(IntegratedMagic::Hand::Left);
                 }
                 if (eqResult.dispatchRight) {
                     MAGIC_DEBUG_LOG("[SpellSystem] DispatchSlotEvents: → DispatchAttack Right 1.0 (equip)");
-                    IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Right, 1.0f, 0.0f);
+                    DispatchAttackPress(IntegratedMagic::Hand::Right);
                 }
             }
 
@@ -188,6 +189,29 @@ namespace Application {
             MAGIC_DEBUG_LOG("[SpellSystem] HandleSlotReleased: slot={}", *s);
             HandleExitAllResult(state.OnSlotReleased(*s));
         }
+    }
+
+    void SpellSystemController::ConsumeInputExitRequests() const {
+        auto& input = InputController::Get();
+        auto& state = IntegratedMagic::MagicState::Get();
+
+        // Transform-shout forced exit: computed by the input layer but, before spec 005, never executed (R6).
+        if (auto fx = input.ConsumeForceExit()) HandleForceExitResult(std::move(*fx));
+
+        // A fresh attack/block press asked to end the session; same rule as the game's blockStart (R6).
+        if (input.ConsumeHandCancelRequest() && state.IsActive() && !state.IsPressMode()) {
+            MAGIC_DEBUG_LOG("[SpellSystem] HandGate cancel -> ForceExit");
+            HandleForceExitResult(state.ForceExit());
+        }
+    }
+
+    void SpellSystemController::DispatchAttackPress(IntegratedMagic::Hand hand) const {
+        // The game must not see the player's own attack/block button held when the plugin presses: release it first,
+        // in the same queue, so the handler gets the release before the press (R5, contract §3).
+        const auto taken = InputController::Get().TakeHeldHandButtons();
+        if (taken.left) IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Left, 0.0f, *taken.left);
+        if (taken.right) IntegratedMagic::detail::DispatchAttack(IntegratedMagic::Hand::Right, 0.0f, *taken.right);
+        IntegratedMagic::detail::DispatchAttack(hand, 1.0f, 0.0f);
     }
 
     void SpellSystemController::NotifyAnimEvent(std::string_view tag) const {

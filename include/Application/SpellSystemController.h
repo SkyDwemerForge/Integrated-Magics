@@ -39,6 +39,12 @@ namespace Application {
         void HandleExitAllResult(IntegratedMagic::StateExitResult result) const;
         void ExecuteRestoreSnapshotPlan(const IntegratedMagic::RestoreSnapshotPlan& plan) const;
         void HandleForceExitResult(IntegratedMagic::StateExitResult result) const;
+        // Exits requested by the input layer: the transform-shout forced exit and the hand-button gate cancel
+        // (spec 005, R6).
+        void ConsumeInputExitRequests() const;
+        // Synthetic press for a hand; first releases any attack/block button the game sees held by the player
+        // (spec 005, R5).
+        void DispatchAttackPress(IntegratedMagic::Hand hand) const;
     };
 
 }

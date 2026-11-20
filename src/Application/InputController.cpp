@@ -19,6 +19,18 @@
 
 namespace Application {
 
+    namespace {
+        // Per-frame flags for the hand-button gate, read from the domain at the start of the frame (spec 005, R4).
+        Input::HandGateFlags BuildHandGateFlags(const IntegratedMagic::MagicState& ms) {
+            using enum IntegratedMagic::Hand;
+            Input::HandGateFlags f{};
+            f.pluginCastLeft = ms.IsHandPluginCast(Left);
+            f.pluginCastRight = ms.IsHandPluginCast(Right);
+            f.mayCancel = (f.pluginCastLeft || f.pluginCastRight) && !ms.IsPressMode();
+            return f;
+        }
+    }
+
     InputController& InputController::Get() {
         static InputController inst;  // NOSONAR
         return inst;
@@ -47,6 +59,7 @@ namespace Application {
 
         const bool spellSystemActive = IntegratedMagic::MagicState::Get().IsActive();
         const int activeSlot = IntegratedMagic::MagicState::Get().ActiveSlot();
+        m_handFlags = BuildHandGateFlags(IntegratedMagic::MagicState::Get());
 
         Input::detail::ReconcilePhysicalKeyState(m_keys, m_slots, m_exclusive, m_replay, m_retained, m_deferred,
                                                  spellSystemActive);
@@ -60,6 +73,9 @@ namespace Application {
         if (m_prevBlocked && !blocked) {
             Input::detail::ClearLikelyStuckKeysAfterMenuClose(m_keys, m_slots, m_exclusive, m_hotkeys, m_replay,
                                                               m_retained, m_deferred);
+            // The gate does not see events while menus block input (spec 005, R4).
+            m_handButtons.ResetHands();
+            m_handButtons.cancelRequested = false;
         }
         if (!m_prevBlocked && blocked) {
             const int n = m_slots.ActiveSlots();
@@ -82,12 +98,16 @@ namespace Application {
         const auto replayResult = Input::detail::DrainOneDeferredReplayEvent(m_replay, m_deferred);
         if (replayResult.replayEvent) {
             const auto& ev = *replayResult.replayEvent;
-            IntegratedMagic::detail::EnqueueRetainedEvent(ev.dev, ev.rawIdCode, ev.userEvent, ev.value, ev.heldSecs);
+            // Replays bypass FilterEvents, so the hand-button gate checks them here (spec 005, R3).
+            if (!Input::detail::GateHandEvent(ev.userEvent, ev.value, ev.heldSecs, m_handButtons, m_handFlags))
+                IntegratedMagic::detail::EnqueueRetainedEvent(ev.dev, ev.rawIdCode, ev.userEvent, ev.value,
+                                                              ev.heldSecs);
         }
         Input::detail::FilterMouseForPopup(a_evns);
 
         if (!blocked)
-            Input::detail::FilterEvents(a_evns, m_keys, m_slots, m_hotkeys, m_exclusive, m_replay, m_retained);
+            Input::detail::FilterEvents(a_evns, m_keys, m_slots, m_hotkeys, m_exclusive, m_replay, m_retained,
+                                        m_handButtons, m_handFlags);
 
         if (wantCaptureBefore && !blocked) {
             RE::InputEvent* prev = nullptr;
@@ -116,6 +136,24 @@ namespace Application {
     void InputController::ResetInputState() {
         MAGIC_DEBUG_LOG("[Input] ResetInputState: resetting exclusive state on game load");
         Input::detail::ResetExclusiveState(m_slots, m_exclusive, m_replay, m_retained, m_deferred);
+        m_handButtons = {};
+    }
+
+    bool InputController::ConsumeHandCancelRequest() noexcept {
+        return std::exchange(m_handButtons.cancelRequested, false);
+    }
+
+    InputController::TakenHandButtons InputController::TakeHeldHandButtons() {
+        using enum IntegratedMagic::Hand;
+        TakenHandButtons taken{Input::TakeHeldForCast(m_handButtons.For(Left)),
+                               Input::TakeHeldForCast(m_handButtons.For(Right))};
+        if (taken.left)
+            MAGIC_DEBUG_LOG("[Input] HandGate: Left button taken at cast start -> released in game (held={:.2f}s)",
+                            *taken.left);
+        if (taken.right)
+            MAGIC_DEBUG_LOG("[Input] HandGate: Right button taken at cast start -> released in game (held={:.2f}s)",
+                            *taken.right);
+        return taken;
     }
 
     std::optional<int> InputController::ConsumeBit(std::atomic<std::uint64_t>& mask) const {

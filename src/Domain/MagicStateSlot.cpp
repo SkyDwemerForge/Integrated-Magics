@@ -55,6 +55,7 @@ namespace IntegratedMagic {
         hm.holdFiredAndWaitingCastStop = false;
         hm.pendingRestartNextFrame = false;
         hm.startRequestSecs = 0.f;
+        hm.startFailSecs = 0.f;
         hm.castingElapsedSecs = 0.f;
         hm.chargeSkipped = false;
         hm.skipMagickaOwed = 0.f;
