@@ -52,6 +52,20 @@ namespace Input::detail {
             }
         }
 
+        // Identical combos on two slots are a configuration conflict: the lower slot fires (spec 004, R5, FR-009).
+        for (int i = 0; i < m; ++i) {
+            for (int j = i + 1; j < m; ++j) {
+                const auto& a = cache.slots[static_cast<std::size_t>(i)];
+                const auto& b = cache.slots[static_cast<std::size_t>(j)];
+                if (ComboSameKeys(a.kb, b.kb))
+                    MAGIC_DEBUG_LOG("[Input] HotkeyCache: slots {} and {} have the same kb combo; slot {} fires", i, j,
+                                    i);
+                if (ComboSameKeys(a.gp, b.gp))
+                    MAGIC_DEBUG_LOG("[Input] HotkeyCache: slots {} and {} have the same gp combo; slot {} fires", i, j,
+                                    i);
+            }
+        }
+
         const auto hudBinding = bindings.GetHudToggleBinding();
         cache.hud.kb = hudBinding.kb;
         cache.hud.gp = hudBinding.gp;

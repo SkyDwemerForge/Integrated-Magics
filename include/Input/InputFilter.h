@@ -11,6 +11,9 @@
 namespace Input::detail {
 
     [[nodiscard]] bool IsInputBlockedByMenus();
+    // Maps an input event to the code slot combos store: scancode (keyboard), kMouseButtonBase + id (mouse),
+    // gamepad index 0..15, or -1 for an unknown gamepad button (spec 004, data-model "Effective code").
+    [[nodiscard]] int EffectiveComboCode(RE::INPUT_DEVICE dev, std::uint32_t rawIdCode);
     [[nodiscard]] ProcessButtonEventsResult ProcessButtonEvents(RE::InputEvent** a_evns, CaptureState& cap,
                                                                 bool& wantCapture, KeyStateStore& keys);
     void FilterMouseForPopup(RE::InputEvent** a_evns);

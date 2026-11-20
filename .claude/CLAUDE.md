@@ -237,6 +237,30 @@ For `Automatic` (and `Hold` with `wantAutoAttack`), the plugin drives the cast v
 
 **`ReplaySystem`** (`ReplayArr`, `DeferredVec`, `RetainedArr`) — defers input events that arrive while a slot's timing window is active and replays them once the window closes, so a held key that spans the window is not lost.
 
+**Shared buttons and held-back presses** (`ShouldFilterAndSave` in `InputFilter.cpp`, `ExclusiveTracker.cpp`; see `specs/004-fix-gamepad-slot-priority/`). On the default gamepad layout every slot shares `RT` (the modifier).
+- **Candidates**: every slot whose combo contains the button. The slot number never decides.
+- **Fresh press**:
+  - if any candidate is down, or has its combo fully held, it is filtered and **consumed**;
+  - otherwise it is **held back** under one owner (most of its combo held, then the longest combo, then the lowest slot), and a filter window of `kComboToleranceSec` (50 ms) opens.
+- **Fate of a held-back press**:
+  - **consumed** when any slot whose combo contains it activates (`ConsumeHeldBackForCombo`);
+  - kept while a slot containing it is **pending** (`kMaxContestedHoldSec` = 0.5 s);
+  - kept while 2 or more of a combo's buttons are held (`kMaxChordHoldSec` = 100 ms, two tolerance gaps): a **chord in progress**, or a combo completed this frame whose slot goes pending later in the frame (`complete`). The cap counts the frame that crosses it;
+  - otherwise **handed to the game** (replayed).
+- **Combo tolerance** (`kComboToleranceSec` = 50 ms, combos of 2+ buttons): the second button within 50 ms of the first, and a 3-button combo within 100 ms. A multi-button slot activates 50 ms after its full combo is held, so a longer combo completed within that time still wins. Single-key slots with Require exclusive hotkey keep a 40 ms wait (`kSingleKeyAcceptDelaySec`).
+- **Press fate** (`ExclusiveStore::kbFate` / `gpFate`, `PressFate`): a button's held repeats and release follow its own press, consumed or passed. An active session does **not** block new presses, so `RT` still casts manually during a Press session. `slotWasAccepted` is no longer used to filter events; it only keeps its edge role in `RecomputeSlotEdges`.
+
+**Overlapping combos** (`RecomputeSlotEdges` pass 2, `ResolveOverlaps`):
+- Among slots completing at the same moment (rising together, or the longer one still pending), the **longest** combo wins.
+- For identical combos, the lower slot wins.
+- The loser is `suppressedUntilRelease` until its combo is released.
+- `LoadHotkeyCache_FromConfig` warns about identical combos: `HotkeyCache: slots <a> and <b> have the same <kb|gp> combo`.
+
+**Logs**:
+- `HoldBack: <label> held for slot=… / consumed by slot=… / handed to game (slot=…)`
+- `HoldBack: slot=… window extended (slot=… pending|chord|complete)`
+- `RecomputeSlotEdges: slot=… SUPPRESSED by slot=…`
+
 **`CaptureState`** — captures the next keypress for hotkey rebinding. Activated via `InputController::RequestHotkeyCapture()`, polled via `PollCapturedHotkey()`.
 
 ---
@@ -312,7 +336,7 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 | Shout/power behavior | `include/Domain/State.h` (`ShoutState`), `src/Domain/MagicStatePump.cpp` (`OnShoutStop`) |
 | Skip channeling behavior | `src/Domain/MagicStatePump.cpp` (`PumpCastPhase` → SkipChanneling block, `PumpAutomatic` dual-cast pairing, `OnCasterInterrupt` `chargeSkipped` failure path, `OnSpellFired` magicka owed), `src/Adapters/Outbound/MagicEquip.cpp` (`ForceChargeComplete`, `DrainMagicka`), `src/Application/SpellSystemController.cpp` (`NotifyAnimEvent` → `DrainMagicka`) |
 | Skip equip animation | `include/Adapters/Outbound/MagicEquip.h` (`SetSkipEquipVars`, `ApplySkipEquipAnimReturn`) |
-| Hotkey not detected / double-firing | `include/Input/ExclusiveStore.h`, `src/Input/ExclusiveTracker.cpp`, `src/Input/InputFilter.cpp` (`ProcessButtonEvents`, `FilterEvents`), `src/Input/PhysicalReconciler.cpp` (stuck-key recovery). Check the log for `REFUSED (not exclusive) extra=` first |
+| Hotkey not detected / double-firing | `include/Input/ExclusiveStore.h`, `src/Input/ExclusiveTracker.cpp`, `src/Input/InputFilter.cpp` (`ProcessButtonEvents`, `FilterEvents`), `src/Input/PhysicalReconciler.cpp` (stuck-key recovery). Check the log for `REFUSED (not exclusive) extra=` first. For shared buttons or a game action leaking during a combo, check the `HoldBack:` lines (`specs/004-fix-gamepad-slot-priority/`) |
 | Hotkey rebinding | `include/Input/CaptureState.h`, `Application::InputController::RequestHotkeyCapture()` |
 | HUD slot rendering | `include/UI/SlotDrawer.h`, `src/UI/SlotDrawer.cpp` |
 | Assignment popup | `include/UI/PopupDrawer.h`, `src/UI/PopupDrawer.cpp`, `IntegratedMagic::MagicAssign` |

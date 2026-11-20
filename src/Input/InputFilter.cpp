@@ -1,6 +1,8 @@
 #include "Input/InputFilter.h"
 
+#include <array>
 #include <ranges>
+#include <span>
 
 #include "Config/ConfigAdapter.h"
 #include "Input/ExclusiveTracker.h"
@@ -156,52 +158,132 @@ namespace Input::detail {
             while (ConsumeBitLocal(releasedMask, slots).has_value());
         }
 
+        // Held repeats and releases follow the fate of their own press (spec 004, research R11, FR-010).
+        // Returns true to keep the event from the game.
+        bool FollowPressFate(const std::span<const int> candidates, bool isGp, int code, bool isRelease,
+                             const RetainedEvent& ev, int n, ExclusiveStore& excl, RetainedArr& retained) {
+            if (isRelease) {
+                for (const int c : candidates) excl.deactivatedThisPress[static_cast<std::size_t>(c)] = false;
+            }
+            PressFate& fate = FateOf(excl, isGp, code);
+            switch (fate) {
+                case PressFate::Consumed:
+                    if (isRelease) fate = PressFate::None;
+                    return true;
+                case PressFate::HeldBack:
+                    if (const int owner = OwnerOf(excl, isGp, code); owner >= 0 && owner < n) {
+                        // Only the release is kept with the held-back press. Held repeats are dropped while it is held
+                        // back: replay drains one event per frame, so stale repeats could reach the game after the
+                        // live release and leave the button stuck. Live repeats pass once the press is handed over.
+                        if (isRelease) retained[static_cast<std::size_t>(owner)].push_back(ev);
+                        return true;
+                    }
+                    fate = PressFate::None;
+                    return false;
+                default:
+                    if (isRelease) fate = PressFate::None;
+                    return false;
+            }
+        }
+
+        // Owner of a held-back press: the candidate with the most of its combo held, then the longest combo, then
+        // the lowest slot (spec 004, research R2 phase 4).
+        int PickHoldBackOwner(const std::span<const int> candidates, bool isGp, const HotkeyCacheStore& cache,
+                              const KeyStateStore& keys) {
+            int owner = candidates.front();
+            int bestHeld = -1;
+            int bestLen = -1;
+            const auto& down = isGp ? keys.gpDown : keys.kbDown;
+            for (const int c : candidates) {
+                const auto& hk = cache.slots[static_cast<std::size_t>(c)];
+                const auto& combo = isGp ? hk.gp : hk.kb;
+                const int held = ComboHeldCount(combo, down);
+                const int len = ComboKeyCount(combo);
+                if (held > bestHeld || (held == bestHeld && len > bestLen)) {
+                    owner = c;
+                    bestHeld = held;
+                    bestLen = len;
+                }
+            }
+            return owner;
+        }
+
+        // Decides whether a button event is kept from the game (spec 004, research R2 and R11). Fresh presses are
+        // evaluated against every candidate slot (every slot whose combo contains the button), so the slot number
+        // never decides; held repeats and releases follow their press.
         bool ShouldFilterAndSave(RE::INPUT_DEVICE dev, int convertedCode, std::uint32_t rawIdCode,
                                  const RE::BSFixedString& userEvent, float value, float heldSecs,
                                  const KeyStateStore& keys, const SlotEdgeStore& slots, const HotkeyCacheStore& cache,
                                  ExclusiveStore& excl, ReplayArr& replay, RetainedArr& retained) {
-            const int effectiveKbCode =
-                (dev == RE::INPUT_DEVICE::kMouse) ? (kMouseButtonBase + convertedCode) : convertedCode;
+            const bool isGp = dev == RE::INPUT_DEVICE::kGamepad;
+            const int code = (dev == RE::INPUT_DEVICE::kMouse) ? (kMouseButtonBase + convertedCode) : convertedCode;
+            if (code < 0 || code >= kMaxCode) return false;
 
+            std::array<int, kInputMaxSlots> candArr{};
+            std::size_t count = 0;
             const int n = slots.ActiveSlots();
             for (int slot = 0; slot < n; ++slot) {
-                const auto s = static_cast<std::size_t>(slot);
-                const auto& hk = cache.slots[s];
-                const bool inKb = (dev == RE::INPUT_DEVICE::kKeyboard || dev == RE::INPUT_DEVICE::kMouse) &&
-                                  ComboContains(hk.kb, effectiveKbCode);
-                const bool inGp = dev == RE::INPUT_DEVICE::kGamepad && ComboContains(hk.gp, convertedCode);
-                if (!inKb && !inGp) continue;
+                const auto& hk = cache.slots[static_cast<std::size_t>(slot)];
+                if (ComboContains(isGp ? hk.gp : hk.kb, code)) candArr[count++] = slot;
+            }
+            if (count == 0) return false;
+            const std::span<const int> candidates(candArr.data(), count);
 
-                if (slots.slotDown[s].load(std::memory_order_relaxed)) return true;
-                if (slots.slotWasAccepted[s]) {
-                    MAGIC_DEBUG_LOG("[Input] ShouldFilterAndSave: slot={} FILTERED (wasAccepted)", slot);
+            const bool isRelease = value <= 0.f;
+            const bool isFresh = !isRelease && heldSecs <= 0.f;
+            const RetainedEvent ev{dev, rawIdCode, userEvent, value, heldSecs};
+
+            // Phase 0: held repeat or release.
+            if (!isFresh) return FollowPressFate(candidates, isGp, code, isRelease, ev, n, excl, retained);
+
+            PressFate& fate = FateOf(excl, isGp, code);
+
+            // Phase 1: a candidate is active or has its combo fully held -> consumed. slotWasAccepted is deliberately
+            // not used here: it stays set for a whole session and would block e.g. a manual RT cast (finding H3).
+            const auto& down = isGp ? keys.gpDown : keys.kbDown;
+            for (const int c : candidates) {
+                const auto s = static_cast<std::size_t>(c);
+                const auto& hk = cache.slots[s];
+                if (slots.slotDown[s].load(std::memory_order_relaxed) || ComboDown(isGp ? hk.gp : hk.kb, down)) {
+                    fate = PressFate::Consumed;
                     return true;
                 }
-                if (inKb && ComboDown(hk.kb, keys.kbDown)) return true;
-                if (inGp && ComboDown(hk.gp, keys.gpDown)) return true;
+            }
 
+            // Phase 2: live continuation of an event being replayed (existing replay rule).
+            for (const int c : candidates) {
+                const auto s = static_cast<std::size_t>(c);
                 if (ReplayMatchesEvent(s, dev, rawIdCode, userEvent, value, replay)) {
                     ResetReplayState(s, replay);
+                    fate = PressFate::Passed;
                     return false;
                 }
-
-                if (excl.deactivatedThisPress[s]) {
-                    if (value < 0.5f) {
-                        excl.deactivatedThisPress[s] = false;
-                        return true;
-                    }
-                }
-
-                if (!excl.filterWindowActive[s]) {
-                    excl.filterWindowActive[s] = true;
-                    excl.filterWindowTimer[s] = kFilterReplayDelaySec;
-                }
-                retained[s].push_back({dev, rawIdCode, userEvent, value, heldSecs});
-                return true;
             }
-            return false;
+
+            // Phase 4: hold the press back under one owner until an activation consumes it or the window releases it.
+            const int owner = PickHoldBackOwner(candidates, isGp, cache, keys);
+            const auto o = static_cast<std::size_t>(owner);
+            if (!excl.filterWindowActive[o]) {
+                excl.filterWindowActive[o] = true;
+                excl.filterWindowTimer[o] = kComboToleranceSec;
+                excl.heldBackSecs[o] = 0.f;
+                excl.contestedLogged[o] = false;
+            }
+            retained[o].push_back(ev);
+            fate = PressFate::HeldBack;
+            OwnerOf(excl, isGp, code) = owner;
+            MAGIC_DEBUG_LOG("[Input] HoldBack: {} held for slot={} (candidates={})", DescribeHeldCode(code, isGp),
+                            owner, count);
+            return true;
         }
 
+    }
+
+    int EffectiveComboCode(RE::INPUT_DEVICE dev, std::uint32_t rawIdCode) {
+        const auto raw = static_cast<int>(rawIdCode);
+        if (dev == RE::INPUT_DEVICE::kGamepad) return GamepadIdToIndex(raw);
+        if (dev == RE::INPUT_DEVICE::kMouse) return kMouseButtonBase + raw;
+        return raw;
     }
 
     bool IsInputBlockedByMenus() {
