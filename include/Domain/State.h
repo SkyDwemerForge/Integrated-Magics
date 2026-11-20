@@ -43,6 +43,8 @@ namespace IntegratedMagic {
         // Skip Channeling: charge cost the game did not drain; paid when the spell fires (reset with chargeSkipped).
         float skipMagickaOwed{0.f};
         float startRequestSecs{0.f};
+        // Time the current attempt has spent without a stable cast; restarts do not reset it (spec 005, R7).
+        float startFailSecs{0.f};
         float castingElapsedSecs{0.f};
         bool waitingSpellFireFinalize{false};
         float spellFireFinalizeSecs{0.f};
@@ -142,6 +144,10 @@ namespace IntegratedMagic {
             return _restore.pendingRestoreAfterSheathe && !_restore.sheatheAnimComplete;
         }
         bool IsPressMode() const noexcept { return _left.pressActive || _right.pressActive; }
+        // The plugin drives this hand's cast input in the active session (spec 005, research R4).
+        [[nodiscard]] bool IsHandPluginCast(Hand h) const noexcept {
+            return _session.active && IsPluginCast(ModeFor(h));
+        }
         void NotifySheatheComplete() noexcept { _restore.sheatheAnimComplete = true; }
         SpellFiredResult OnSpellFired(Hand hand);
         const HandMode& LeftMode() const noexcept { return _left; }
@@ -199,6 +205,11 @@ namespace IntegratedMagic {
 
         static bool IsLeft(Hand h) noexcept { return h == Hand::Left; }
 
+        // Same eligibility as RequestAutoAttackStart and OnCasterInterrupt (spec 005, R4).
+        [[nodiscard]] static bool IsPluginCast(const HandMode& hm) noexcept {
+            return !hm.finished && (hm.autoActive || (hm.holdActive && hm.wantAutoAttack));
+        }
+
         void MarkDirty(Hand h) {
             if (IsLeft(h))
                 _restore.dirtyLeft = true;
@@ -225,6 +236,8 @@ namespace IntegratedMagic {
         void EnterHand(Hand hand, const SpellSettings& ss, bool skipAnim);
         void TogglePressHand(Hand hand, const SpellSettings& ss);
         float FinishHand(Hand hand);
+        // FinishHand + the spell-fire finalize, so the session ends once nothing is left (spec 005, R12).
+        void FinishAndFinalize(Hand hand, CastInterruptResult& result);
         void SetModeSpellsFromHand(Hand hand, RE::SpellItem* spell);
 
         [[nodiscard]] PumpCastPhaseResult PumpCastPhase(Hand hand, float dt);
@@ -242,6 +255,10 @@ namespace IntegratedMagic {
         bool _inSlotSetup{false};
 
         static constexpr float kMaxActiveTimeoutSecs = 30.f;
+        // Retry bound: a plugin-cast hand with no stable cast after this long ends the session (spec 005, Q2, R7).
+        static constexpr float kMaxCastStartSecs = 1.0f;
+        // Interruptions below this cast time are spurious; a cast past it is real (R7, R12).
+        static constexpr float kSpuriousInterruptWindowSecs = 0.2f;
     };
 
 }

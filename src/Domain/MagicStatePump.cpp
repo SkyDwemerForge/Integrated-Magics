@@ -120,6 +120,7 @@ namespace IntegratedMagic {
         _aa.Secs(hand) = 0.f;
         hm.autoCastPhase = AutoCastPhase::StartRequested;
         hm.startRequestSecs = 0.f;
+        hm.startFailSecs = 0.f;
         hm.chargeSkipped = false;
         hm.skipMagickaOwed = 0.f;
 
@@ -303,6 +304,10 @@ namespace IntegratedMagic {
             return result;
         }
 
+        // Total time without a stable cast, including deferred-restart frames; restarts never reset it (spec 005, R7).
+        if (IsPluginCast(hm) && hm.autoCastPhase == AutoCastPhase::StartRequested)
+            hm.startFailSecs += dt > 0.f ? dt : 0.f;
+
         if (hm.pendingRestartNextFrame) {
             if (_session.isDualCasting) {
                 auto* p = GetPlayer();
@@ -417,6 +422,8 @@ namespace IntegratedMagic {
 
         if (hm.autoCastPhase == AutoCastPhase::Casting) {
             hm.castingElapsedSecs += dt > 0.f ? dt : 0.f;
+            // A cast that lasts past the spurious window is real: the attempt succeeded (R7).
+            if (hm.castingElapsedSecs >= kSpuriousInterruptWindowSecs) hm.startFailSecs = 0.f;
         }
 
         if (hm.autoActive && hm.autoCastPhase == AutoCastPhase::Casting && hm.waitingChargeComplete) {
@@ -783,6 +790,19 @@ namespace IntegratedMagic {
 
         using enum Hand;
 
+        // Retry bound (spec 005, Q2, R7): a plugin-cast hand with no stable cast after kMaxCastStartSecs ends the
+        // session through the same exit as the safety timeout. ForceExit ends both hands in dual cast.
+        for (const Hand h : {Left, Right}) {
+            const auto& hm = ModeFor(h);
+            if (_session.active && IsPluginCast(hm) && hm.autoCastPhase == AutoCastPhase::StartRequested &&
+                hm.startFailSecs >= kMaxCastStartSecs) {
+                MAGIC_DEBUG_LOG("[FLOW] PumpAutomatic: hand={} cast did not start in {:.2f}s -> ForceExit",
+                                IsLeft(h) ? "L" : "R", hm.startFailSecs);
+                mergeForceExit(ForceExit());
+                return result;
+            }
+        }
+
         const auto leftPhase = PumpCastPhase(Left, dt);
         const auto rightPhase = PumpCastPhase(Right, dt);
         mergePumpPhase(Left, leftPhase);
@@ -950,18 +970,10 @@ namespace IntegratedMagic {
         if (hm.chargeSkipped) {
             MAGIC_DEBUG_LOG("[FLOW] SkipChanneling: interrupted after skip hand={} magicka={:.1f} -> finish (no retry)",
                             IsLeft(hand) ? "L" : "R", GetPlayerMagicka(GetPlayer()));
-            auto finishOne = [&](Hand h) {
-                const float f = FinishHand(h);
-                if (IsLeft(h))
-                    result.finishedLeft = f;
-                else
-                    result.finishedRight = f;
-                ScheduleSpellFireFinalize(h);
-            };
-            finishOne(hand);
+            FinishAndFinalize(hand, result);
             if (_session.isDualCasting) {
                 const Hand other = IsLeft(hand) ? Hand::Right : Hand::Left;
-                if (!ModeFor(other).finished) finishOne(other);
+                if (!ModeFor(other).finished) FinishAndFinalize(other, result);
             }
             return result;
         }
@@ -998,8 +1010,7 @@ namespace IntegratedMagic {
             return result;
         }
 
-        constexpr float kSpuriousInterruptWindow = 0.2f;
-        const bool isSpurious = (hm.castingElapsedSecs < kSpuriousInterruptWindow);
+        const bool isSpurious = (hm.castingElapsedSecs < kSpuriousInterruptWindowSecs);
 
         if (isSpurious) {
             if (hm.needsManualFireInKReady) {
@@ -1025,12 +1036,24 @@ namespace IntegratedMagic {
             return result;
         }
 
+        // A real interruption: finish the hand (and its dual-cast partner) and schedule the finalize, so the session
+        // ends once nothing is left instead of staying active until the timeout or the release (spec 005, R12).
+        MAGIC_DEBUG_LOG("[State] OnCasterInterrupt: hand={} real interrupt -> finish + finalize session",
+                        IsLeft(hand) ? "Left" : "Right");
+        FinishAndFinalize(hand, result);
+        if (_session.isDualCasting) {
+            const Hand other = IsLeft(hand) ? Hand::Right : Hand::Left;
+            if (!ModeFor(other).finished) FinishAndFinalize(other, result);
+        }
+        return result;
+    }
+
+    void MagicState::FinishAndFinalize(Hand hand, CastInterruptResult& result) {
         const float finished = FinishHand(hand);
         if (IsLeft(hand))
             result.finishedLeft = finished;
         else
             result.finishedRight = finished;
-
-        return result;
+        ScheduleSpellFireFinalize(hand);
     }
 }
