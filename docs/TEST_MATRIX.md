@@ -41,11 +41,11 @@ Bloqueante: se algum item falhar, o resto da matriz não pode ser executado. Ver
 
 Os mais sensíveis — relacionados aos commits recentes (dual cast, skip channeling).
 
-- [ ] **1.1** Dual cast, mesma spell, COM perk, skipEquipAnim OFF, skipChanneling OFF, 2 armas equipadas → **um único cast dual** (anim de dual cast, custo de mana aumentado).
+- [x] **1.1** Dual cast, mesma spell, COM perk, skipEquipAnim OFF, skipChanneling OFF, 2 armas equipadas → **um único cast dual** (anim de dual cast, custo de mana aumentado).
 - [ ] **1.2** Dual cast, mesma spell, COM perk, skipEquipAnim **ON**, skipChanneling OFF → um único cast dual, sem anim de saque
-- [ ] **1.3** Dual cast, mesma spell, COM perk, skipChanneling **ON** → cast dual instantâneo (sem channeling)
+- [x] **1.3** Dual cast, mesma spell, COM perk, skipChanneling **ON** → cast dual instantâneo (sem channeling)
 - [ ] **1.4** Dual cast, mesma spell, **SEM perk** → comportamento definido/intencional (validar)
-- [ ] **1.5** Dual cast a partir de **mãos embainhadas** (`wasHandsDown=true`) → sobe as mãos + cast dual sincronizado
+- [x] **1.5** Dual cast a partir de **mãos embainhadas** (`wasHandsDown=true`) → sobe as mãos + cast dual sincronizado
 - [ ] **1.6** Dual cast a partir de **mãos já sacadas** (`wasHandsDown=false`) → cast dual sem re-saque
 
 ---
@@ -121,13 +121,13 @@ Validar com o build **DEBUG** e acompanhar as linhas `[FLOW] SkipChanneling:` no
 
 ## 6. Patches de input
 
-- [ ] **6.1** `requireExclusiveHotkey` ON — combo R1+L1; pressionar R1+L1+R2 → slot **não** ativa
-- [ ] **6.2** `requireExclusiveHotkey` ON — pressionar exatamente R1+L1 → slot ativa
-- [ ] **6.3** `pressBothAtSame` ON — segurar R1 por 2s, depois pressionar L1 → slot **não** ativa
-- [ ] **6.4** `pressBothAtSame` ON — pressionar R1+L1 dentro da janela → slot ativa
-- [ ] **6.5** Ambos ON → validar interação
-- [ ] **6.6** Replay system — tecla segurada atravessando a janela de timing → evento não é perdido
-- [ ] **6.7** Teclado vs Gamepad — mesmo slot com combos de KB e GP → ambos funcionam
+- [x] **6.1** `requireExclusiveHotkey` ON — combo R1+L1; pressionar R1+L1+R2 → slot **não** ativa
+- [x] **6.2** `requireExclusiveHotkey` ON — pressionar exatamente R1+L1 → slot ativa
+- [x] **6.3** `pressBothAtSame` ON — segurar R1 por 2s, depois pressionar L1 → slot **não** ativa
+- [x] **6.4** `pressBothAtSame` ON — pressionar R1+L1 dentro da janela → slot ativa
+- [x] **6.5** Ambos ON → validar interação
+- [x] **6.6** Replay system — tecla segurada atravessando a janela de timing → evento não é perdido
+- [x] **6.7** Teclado vs Gamepad — mesmo slot com combos de KB e GP → ambos funcionam
 
 Roda do mouse × hotkeys (spec `specs/003-fix-mouse-wheel-hotkeys/`):
 
@@ -142,6 +142,27 @@ Roda do mouse × hotkeys (spec `specs/003-fix-mouse-wheel-hotkeys/`):
   ativam. Falha = segunda causa, abrir spec separada
 - [x] **6.14** `requireExclusiveHotkey` ON — segurar tecla fora do combo (ex.: `G`) e apertar o slot → não ativa, e o
   log mostra `REFUSED (not exclusive) extra=kb:0x22` uma vez
+
+Gamepad × slots compartilhando botões (spec `specs/004-fix-gamepad-slot-priority/`):
+
+- [x] **6.15** 8 slots, slots 5–8 = `face + RT + LB`. Segurar `RT + LB` e apertar o botão de face por último → o slot
+  5–8 conjura, sem pulo/ataque/menu do jogo
+- [x] **6.16** Ordem (slots 1–8, acorde rápido): botão de face um pouco antes do `RT` (ex.: Triângulo/`Y` antes do
+  R2/`RT`) e também `RT` primeiro → conjura nas duas ordens, sem pulo/ação do botão de face e sem ataque da mão
+  direita
+- [x] **6.17** Botões sozinhos (`RT`, `Y`, `A`, `B`) sem completar combo → a ação normal do jogo acontece, sem atraso
+  perceptível
+- [x] **6.18** Sobreposição: segurar `RT + LB`, `Y` por último → o slot 6 dispara e o slot 2 não; o log mostra
+  `SUPPRESSED by slot=5`
+- [x] **6.19** Combos idênticos (slot 8 = `B + RT` como o slot 3) → aviso `HotkeyCache: slots 2 and 7 have the same gp
+  combo` ao carregar; o slot 3 dispara
+- [x] **6.20** `requireExclusiveHotkey` ON + sobreposição → o slot 6 dispara e o slot 2 é recusado com `extra=gp:8`
+- [x] **6.21** Teclado: slot 1 `Shift + 1`, slot 5 `Shift + 5` → cada combo ativa o próprio slot, e `Shift` não chega ao
+  jogo
+- [x] **6.22** Modo Hold: segurar o combo do slot 6 (`Y + RT + LB`) por ~2 s → nenhuma ação do jogo durante o hold; ao
+  soltar, nenhum botão fica preso
+- [x] **6.23** Slot 2 em Press sem auto-ataque ativo: apertar `RT` sozinho → conjura manualmente; o log mostra
+  `handed to game` para `RT`
 
 ---
 

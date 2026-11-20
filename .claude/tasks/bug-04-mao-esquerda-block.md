@@ -28,3 +28,7 @@ Um estado residual de bloqueio no behavior graph (ou um input de ataque esquerdo
 ## Arquivos prováveis
 - `src/Domain/MagicStatePump.cpp` (`PumpCastPhase`, `OnCasterInterrupt`, `PumpAutoAttack`)
 - `include/Adapters/Outbound/SyntheticInput.h`
+
+## extra info
+
+I found the left hand cast issue is related to the block behavior. if you get stuck in the state that left hand casting twitching and interrupted, quick clicking few times block key while holding the  casting hotkey will fix it. vice versa, if you're in normal state, holding block key and entering block state while holding the casting hotkey will make you stuck in left hand casting twitching and interrupted again.

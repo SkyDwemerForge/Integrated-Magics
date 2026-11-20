@@ -741,12 +741,16 @@ namespace {
             if (st.showSpellNamesInHud) {
                 ImGuiMCP::Spacing();
 
-                static const char* kCornerNames[] = {"Top",  "Right",         "Bottom",
-                                                     "Left", "Toward Center", "Away from Center"};
+                // Same order as IntegratedMagic::ButtonLabelCorner.
+                const std::string posNames =
+                    S::Get("HUD_SpellNamePos_Top", "Top") + '\0' + S::Get("HUD_SpellNamePos_Right", "Right") + '\0' +
+                    S::Get("HUD_SpellNamePos_Bottom", "Bottom") + '\0' + S::Get("HUD_SpellNamePos_Left", "Left") +
+                    '\0' + S::Get("HUD_SpellNamePos_TowardCenter", "Toward Center") + '\0' +
+                    S::Get("HUD_SpellNamePos_AwayFromCenter", "Away from Center") + '\0';
                 auto posIdx = static_cast<int>(st.spellNamePosition);
                 ImGuiMCP::SetNextItemWidth(180.f);
-                if (ImGuiMCP::Combo(S::Get("HUD_SpellNamePos", "Position##spellnamepos").c_str(), &posIdx, kCornerNames,
-                                    6)) {
+                if (ImGuiMCP::Combo(S::Get("HUD_SpellNamePos", "Position##spellnamepos").c_str(), &posIdx,
+                                    posNames.c_str())) {
                     st.spellNamePosition = static_cast<IntegratedMagic::ButtonLabelCorner>(posIdx);
                     dirty = true;
                 }
@@ -810,10 +814,9 @@ namespace {
                     dirty = true;
                 }
                 if (ImGuiMCP::IsItemHovered())
-                    ImGuiMCP::SetTooltip(
-                        S::Get("HUD_Icon_TintStrength_Tip",
-                               "0 = sem tint  |  1 = força máxima (controlada pelo alpha da Tint Color)")
-                            .c_str());
+                    ImGuiMCP::SetTooltip("%s", S::Get("HUD_Icon_TintStrength_Tip",
+                                                      "0 = no tint  |  1 = full strength (scaled by Tint Color alpha)")
+                                                   .c_str());
             }
 
             ImGuiMCP::Spacing();
@@ -982,16 +985,15 @@ namespace {
                 }
 
                 ImGuiMCP::Spacing();
-                if (ImGuiMCP::Button(S::Get("Shape_SwitchCustom", "Usar forma customizada...##switchcustom").c_str())) {
+                if (ImGuiMCP::Button(S::Get("Shape_SwitchCustom", "Use custom shape...##switchcustom").c_str())) {
                     shape.useCustomShape = true;
                     dirty = true;
                 }
             } else {
-                ImGuiMCP::SeparatorText(S::Get("Shape_CustomShape", "Forma Customizada").c_str());
+                ImGuiMCP::SeparatorText(S::Get("Shape_CustomShape", "Custom Shape").c_str());
                 ImGuiMCP::Spacing();
 
-                if (ImGuiMCP::Button(
-                        S::Get("Shape_SwitchCorner", "< Voltar para Corner Style##switchtocorner").c_str())) {
+                if (ImGuiMCP::Button(S::Get("Shape_SwitchCorner", "< Back to Corner Style##switchtocorner").c_str())) {
                     shape.useCustomShape = false;
                     dirty = true;
                 }

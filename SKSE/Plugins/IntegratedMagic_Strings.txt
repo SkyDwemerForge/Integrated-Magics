@@ -1,0 +1,341 @@
+# IntegratedMagic_Strings.txt
+# Format: key=value
+# Lines starting with # are comments.
+# Tip: translate only the right side of '='.
+#   - "\n" is a line break.
+#   - Keep any "##..." suffix exactly as it is: it is an internal ID and is not shown in game.
+#   - A key missing from this file falls back to the built-in English text.
+
+# ----------------------------
+# Menu / Section
+# ----------------------------
+SectionName=Integrated Magic
+SectionItem_Settings=Settings
+
+# ----------------------------
+# Tabs
+# ----------------------------
+Tab_General=General
+Tab_Controls=Controls
+Tab_HUD=HUD
+Tab_Patches=Patches
+
+# ----------------------------
+# Apply button
+# ----------------------------
+Item_Apply=Apply changes
+
+# ----------------------------
+# General tab
+# ----------------------------
+Item_SlotCount=Slot count
+Item_ButtonIconType=Button icons##buttonicons
+Item_ButtonIcon_Keyboard=Keyboard
+Item_ButtonIcon_PlayStation=PlayStation
+Item_ButtonIcon_Xbox=Xbox
+
+# HUD visibility flags
+HUD_Visibility_Label=HUD Visibility
+HUD_Show_Always=Always
+HUD_Show_SlotActive=Slot Active
+HUD_Show_InCombat=In Combat
+HUD_Show_WeaponDrawn=Weapon Drawn
+HUD_Show_Never_Hint=HUD hidden
+
+# Default spell behavior
+Section_SpellTypeDefaults=Default spell behavior
+SpellType_Concentration=Concentration
+SpellType_Cast=Cast
+SpellType_Bound=Bound weapon
+SpellType_Power=Power
+SpellType_Shout=Shout
+Item_Mode=Mode##mode
+Mode_Hold=Hold
+Mode_Press=Press
+Mode_Automatic=Automatic
+Mode_Auto=Auto
+Item_AutoCast=Auto-cast##autocast
+
+# ----------------------------
+# Controls tab — slot list
+# ----------------------------
+# Slots beyond 8 work the same way: List_MagicN / Detail_MagicN, where N is the slot number
+# (default text "Magic N").
+List_Magic1=Magic 1
+List_Magic2=Magic 2
+List_Magic3=Magic 3
+List_Magic4=Magic 4
+List_Magic5=Magic 5
+List_Magic6=Magic 6
+List_Magic7=Magic 7
+List_Magic8=Magic 8
+List_HudPopup=HUD Popup
+
+# ----------------------------
+# Controls tab — detail panel header
+# ----------------------------
+Detail_Magic1=Magic 1
+Detail_Magic2=Magic 2
+Detail_Magic3=Magic 3
+Detail_Magic4=Magic 4
+Detail_Magic5=Magic 5
+Detail_Magic6=Magic 6
+Detail_Magic7=Magic 7
+Detail_Magic8=Magic 8
+Detail_HudPopup=HUD Popup
+
+# ----------------------------
+# Controls tab — table columns
+# ----------------------------
+Col_Keyboard=Keyboard
+Col_Gamepad=Gamepad
+
+# ----------------------------
+# Controls tab — key/button fields
+# ----------------------------
+Item_Key1=Key 1
+Item_Key2=Key 2
+Item_Key3=Key 3
+Item_Btn1=Btn 1
+Item_Btn2=Btn 2
+Item_Btn3=Btn 3
+
+# ----------------------------
+# Controls tab — capture button and status
+# ----------------------------
+Btn_Cap=Cap
+Btn_CancelCapture=X
+Capture_WaitKb=Press a keyboard key or mouse button
+Capture_WaitGp=Press a gamepad button
+
+# ----------------------------
+# Controls tab — modifier key
+# ----------------------------
+Btn_Modifier=M
+Tooltip_MarkModifier=Mark as modifier
+Tooltip_UnmarkModifier=Unmark as modifier
+
+# ----------------------------
+# Patches tab
+# ----------------------------
+Item_SkipEquipAnim=Skip equip animation
+Tooltip_SkipEquipAnim=Skips the equip animation when activating a slot via hotkey.\nRecommended for faster spell swapping.
+
+Item_SkipEquipAnimReturn=Skip equip animation on return
+Tooltip_SkipEquipAnimReturn=Skips the equip animation when restoring the previous snapshot\nAfter exiting a slot.
+
+Item_RequireExclusiveHotkey=Require exclusive hotkey
+Tooltip_RequireExclusiveHotkey=When enabled, a hotkey combo only triggers if no other keys\nare held at the same time. Prevents accidental activation\nduring combat or movement.
+
+Item_PressBothAtSame=Press both at the same time
+Tooltip_PressBothAtSame=When enabled, all keys in a combo must be pressed within\n0.2 seconds of each other.\nHolding one key and pressing the other later will not activate\nthe slot.
+
+Item_SkipChanneling=Skip channeling
+Tooltip_SkipChanneling=When enabled, Fire-and-Forget spells cast automatically (Automatic mode,\nor Press with auto-attack) skip the hand charging animation and fire instantly.\nBound weapons are included; their summon animation is kept.\nConcentration spells are not affected.
+
+# ----------------------------
+# HUD tab — In-game HUD
+# ----------------------------
+HUD_Section_InGame=In-game HUD
+
+# Layout
+HUD_Section_Layout=Layout
+HUD_Layout_Label=Layout##hudlayout
+HUD_Layout_Circular=Circular
+HUD_Layout_Horizontal=Horizontal
+HUD_Layout_Vertical=Vertical
+HUD_Layout_Grid=Grid
+HUD_Spacing_Label=Spacing##slotspacing
+HUD_Columns_Label=Columns##gridcols
+HUD_RingRadius_Label=Ring R##ringradius
+
+# Position
+HUD_Section_Position=Position
+HUD_OffsetX_Label=X##hudox
+HUD_OffsetY_Label=Y##hudoy
+
+# Slots
+HUD_Section_Slots=Slots
+HUD_SlotRadius_Label=Radius##slotradius
+HUD_RingWidth_Label=Ring Width##ringwidth
+HUD_ActiveScale_Label=Active##activescale
+HUD_ModifierScale_Label=Modifier##modscale
+HUD_NeighborScale_Label=Neighbor##neighborscale
+HUD_ExpandTime_Label=Expand##expandtime
+HUD_RetractTime_Label=Retract##retracttime
+
+# Spell names
+HUD_ShowSpellNames=Show spell names##showspellnames
+HUD_SpellNamePos=Position##spellnamepos
+HUD_SpellNamePos_Top=Top
+HUD_SpellNamePos_Right=Right
+HUD_SpellNamePos_Bottom=Bottom
+HUD_SpellNamePos_Left=Left
+HUD_SpellNamePos_TowardCenter=Toward Center
+HUD_SpellNamePos_AwayFromCenter=Away from Center
+HUD_SpellNamePadding=Padding##spellnamepadding
+
+# Icons
+HUD_Section_Icons=Icons
+HUD_IconSize_Label=Size##iconsizefactor
+HUD_IconOffset_Label=Offset##iconoffsetfactor
+HUD_Icon_TintColor=Tint Color##icontintcolor
+HUD_Icon_Saturation=Saturation##iconsat
+HUD_Icon_Brightness=Brightness##iconbri
+HUD_Icon_TintStrength=Tint Strength##icontintstrength
+HUD_Icon_TintStrength_Tip=0 = no tint  |  1 = full strength (scaled by Tint Color alpha)
+
+# Text
+HUD_Section_Text=Text
+HUD_Text_Color=Text Color##textcolor
+HUD_TextShadow_Enabled=Text shadow##textshadowenabled
+HUD_TextShadow_Color=Shadow Color##textshadowcol
+HUD_TextShadow_OffsetX=Offset X##textshadowox
+HUD_TextShadow_OffsetY=Offset Y##textshadowoy
+
+# ----------------------------
+# HUD tab — Popup section
+# ----------------------------
+HUD_Section_Popup=Popup
+HUD_PopupLayout_Label=Layout##popuplayout
+HUD_PopupSlotR_Label=Slot R##popupslotradius
+HUD_PopupRingR_Label=Ring R##popupringradius
+HUD_PopupGap_Label=Gap##popupslotgap
+HUD_ModeWidgetW_Label=Widget W##modewidgetw
+HUD_OverlayAlpha_Label=Overlay Alpha##overlayalpha
+HUD_PopupOffsetX_Label=Offset X##popupox
+HUD_PopupOffsetY_Label=Offset Y##popupoy
+
+# Overlay
+HUD_Section_Overlay=Overlay
+HUD_Overlay_Color=Color##overlaycolor
+HUD_Vignette_Strength=Vignette##vignettestrength
+HUD_Vignette_Color=Vignette Color##vignettecolor
+
+# ----------------------------
+# HUD tab — Slot Shape section
+# ----------------------------
+HUD_Section_SlotShape=Slot Shape
+HUD_Section_Corner=Corner Style
+HUD_CornerStyle_Label=Style##cornerstyle
+HUD_Corner_Round=Round
+HUD_Corner_Square=Square
+HUD_Corner_Notched=Notched
+HUD_Corner_Chamfered=Chamfered
+HUD_CornerSize_Label=Size##cornersize
+
+# Shape editor
+Shape_SwitchCustom=Use custom shape...##switchcustom
+Shape_SwitchCorner=< Back to Corner Style##switchtocorner
+Shape_CustomShape=Custom Shape
+Shape_AddVertex=+ Vertex
+Shape_RemoveVertex=- Vertex
+Shape_Presets=Presets
+Shape_Circle=Circle
+Shape_Square=Square
+Shape_Diamond=Diamond
+Shape_Star5=Star (5)
+Shape_Star6=Star (6)
+
+# ----------------------------
+# HUD tab — Modifier Button section
+# ----------------------------
+HUD_Section_Modifier=Modifier Button
+Item_ModifierVisibility=Visibility##modvis
+Item_ModVis_Never=Never
+Item_ModVis_Always=Always
+Item_ModVis_HideOnPress=Hide on press
+HUD_ModWidget_Radius=Radius##modwidgetradius
+HUD_ModWidget_OffsetX=X##modwidgetox
+HUD_ModWidget_OffsetY=Y##modwidgetoy
+
+# ----------------------------
+# HUD tab — Button Labels section
+# ----------------------------
+HUD_Section_ButtonLabels=Button Labels
+HUD_BtnLbl_Visibility=Visibility##btnlblvis
+HUD_BtnLbl_Never=Never
+HUD_BtnLbl_Always=Always
+HUD_BtnLbl_OnModifier=On modifier
+HUD_BtnLbl_Corner=Corner
+HUD_BtnLbl_TowardCenter=Inward##tc
+HUD_BtnLbl_AwayFromCenter=Outward##ac
+HUD_BtnLbl_IconSize=Icon size##btnlblsz
+HUD_BtnLbl_IconSpacing=Spacing##btnlblspc
+HUD_BtnLbl_Margin=Margin##btnlblmar
+HUD_BtnLbl_OffsetX=X##btnlblox
+HUD_BtnLbl_OffsetY=Y##btnlbloy
+HUD_BtnLbl_FadeTime=Fade##btnlblft
+
+# ----------------------------
+# HUD tab — Colors section
+# ----------------------------
+HUD_Section_Colors=Colors
+
+# Slots
+HUD_Colors_Slots=Slots
+HUD_Color_BgActive=Bg Active##slotbgactive
+HUD_Color_BgInactive=Bg Inactive##slotbginactive
+HUD_Color_RingInactive=Ring Inactive##slotringinactive
+HUD_Color_RingActive=Ring Active##slotringactive
+HUD_Color_RingActiveAlpha=Ring Active Alpha##slotringactivealpha
+HUD_Color_RingWidth=Ring Width##slotrw
+HUD_Color_RingWidthActive=Active Width##slotringwa
+HUD_Color_OuterRing=Outer Ring##slotouterring
+HUD_Color_OuterRingWidth=Outer Ring Width##slotouterrw
+HUD_Color_IconAlpha=Icon Alpha##iconalpha
+HUD_Color_EmptySlot=Empty Slot##emptyslotcolor
+
+# Ring center
+HUD_Colors_RingCenter=Ring Center
+HUD_Color_RingCenterFill=Fill##ringcenterfill
+HUD_Color_RingCenterBorder=Border##ringcenterborder
+
+# Background gradient
+HUD_Colors_Gradient=Background Gradient
+HUD_Grad_Type=Type##gradtype
+HUD_Grad_None=None
+HUD_Grad_Radial=Radial
+HUD_Grad_Linear=Linear
+HUD_Grad_Start=Start Color##gradstart
+HUD_Grad_End=End Color##gradend
+HUD_Grad_Angle=Angle##gradangle
+HUD_Grad_RadialOffset=Center Offset##gradradial
+
+# Glow
+HUD_Colors_Glow=Glow
+HUD_Glow_Style=Style##glowstyle
+HUD_Glow_Ring=Ring
+HUD_Glow_Fill=Fill
+HUD_Glow_Both=Both
+HUD_Glow_Layers=Layers##glowlayers
+HUD_Glow_Radius=Radius##glowradius
+HUD_Glow_Intensity=Intensity##glowintensity
+HUD_Glow_PulseSpeed=Pulse Speed##pulsespeed
+
+# School colors
+HUD_Colors_Schools=School Colors
+HUD_Colors_Fill=Fill
+HUD_School_Alteration=Alteration
+HUD_School_Conjuration=Conjuration
+HUD_School_Destruction=Destruction
+HUD_School_Illusion=Illusion
+HUD_School_Restoration=Restoration
+HUD_School_Default=Default
+HUD_School_Empty=Empty
+
+# ----------------------------
+# HUD popup (in game) — hints bar
+# ----------------------------
+Popup_Hint_Assign=Assign
+Popup_Hint_AssignRight=Assign Right
+Popup_Hint_AssignLeft=Assign Left
+Popup_Hint_Clear=Clear
+
+# ----------------------------
+# HUD popup (in game) — mode widget
+# ----------------------------
+Popup_Mode_HoldShort=H
+Popup_Mode_PressShort=P
+Popup_Mode_AutoShort=A
+Popup_AutoAttackShort=AA

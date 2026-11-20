@@ -1,0 +1,1 @@
+# The contents of this folder are what should be loaded with the mod. The compiled DLL should go inside the Plugins/

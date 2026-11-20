@@ -1,10 +1,11 @@
 #include "Input/ExclusiveTracker.h"
 
-#include <format>
-#include <string>
+#include <array>
 #include <utility>
+#include <vector>
 
 #include "Input/HotkeyMatcher.h"
+#include "Input/InputFilter.h"
 #include "Input/ReplaySystem.h"
 #include "PCH.h"
 
@@ -27,12 +28,146 @@ namespace Input::detail {
             }
         }
 
-        // Log label for a held input code: kb:0x<scan>, mouse:<id> or gp:<index> (spec 003, research R7).
-        [[maybe_unused]] std::string DescribeHeldCode(int code, bool gamepad) {
-            if (code < 0) return "none";
-            if (gamepad) return std::format("gp:{}", code);
-            if (code >= kMouseButtonBase) return std::format("mouse:{}", code - kMouseButtonBase);
-            return std::format("kb:{:#04x}", code);
+        using SlotFlags = std::array<bool, kInputMaxSlots>;
+
+        [[nodiscard]] bool IsGamepadEvent(const RetainedEvent& ev) { return ev.dev == RE::INPUT_DEVICE::kGamepad; }
+
+        // Press or release (not a held repeat): the only events worth a log line.
+        [[nodiscard]] bool IsPressOrRelease(const RetainedEvent& ev) { return ev.heldSecs <= 0.f || ev.value <= 0.f; }
+
+        void CloseFilterWindow(std::size_t s, ExclusiveStore& excl) {
+            excl.filterWindowActive[s] = false;
+            excl.filterWindowTimer[s] = 0.f;
+            excl.heldBackSecs[s] = 0.f;
+            excl.contestedLogged[s] = false;
+        }
+
+        // Sets the press fate of a held-back event's code. A code whose event is its release has finished its press,
+        // so its fate goes back to None (spec 004, research R11).
+        void ResolveFate(const RetainedEvent& ev, PressFate fate, ExclusiveStore& excl) {
+            const bool gp = IsGamepadEvent(ev);
+            const int code = EffectiveComboCode(ev.dev, ev.rawIdCode);
+            if (code < 0) return;
+            FateOf(excl, gp, code) = (ev.value <= 0.f) ? PressFate::None : fate;
+            OwnerOf(excl, gp, code) = -1;
+        }
+
+        // Applied in order, so the last event of each code decides.
+        void ResolveFates(const std::vector<RetainedEvent>& events, PressFate fate, ExclusiveStore& excl) {
+            for (const auto& ev : events) ResolveFate(ev, fate, excl);
+        }
+
+        void ResetAllFates(ExclusiveStore& excl) {
+            excl.kbFate.fill(PressFate::None);
+            excl.gpFate.fill(PressFate::None);
+            excl.kbOwner.fill(-1);
+            excl.gpOwner.fill(-1);
+        }
+
+        [[nodiscard]] bool ComboHasCode(const SlotHotkeys& hk, bool gp, int code) {
+            return code >= 0 && ComboContains(gp ? hk.gp : hk.kb, code);
+        }
+
+        struct HoldReason {
+            int slot{-1};
+            const char* why{""};
+        };
+
+        // Why a held-back window may stay open after kComboToleranceSec (spec 004, research R3b/R3c): a slot that uses
+        // one of its buttons is still pending (up to kMaxContestedHoldSec), or has 2+ of its buttons held (up to
+        // kMaxChordHoldSec). 2+ held is a chord in progress, or a combo completed this frame: its slot only goes
+        // pending later in this frame, so without it a button arriving in the frame the window ends would let the first
+        // one leak. The chord cap counts the frame that crosses it, since input seen now arrived during the last dt.
+        [[nodiscard]] HoldReason FindHoldReason(std::size_t s, float dt, const ExclusiveStore& excl,
+                                                const HotkeyCacheStore& cache, const KeyStateStore& keys,
+                                                const RetainedArr& retained, int n) {
+            const bool allowPending = excl.heldBackSecs[s] < kMaxContestedHoldSec;
+            const bool allowChord = excl.heldBackSecs[s] - dt < kMaxChordHoldSec;
+            HoldReason chord{};
+            if (!allowPending && !allowChord) return chord;
+            for (const auto& ev : retained[s]) {
+                const bool gp = IsGamepadEvent(ev);
+                const int code = EffectiveComboCode(ev.dev, ev.rawIdCode);
+                for (int t = 0; t < n; ++t) {
+                    const auto& hk = cache.slots[static_cast<std::size_t>(t)];
+                    if (!ComboHasCode(hk, gp, code)) continue;
+                    if (allowPending && excl.pendingSrc[static_cast<std::size_t>(t)] != PendingSrc::None)
+                        return {t, "pending"};
+                    if (allowChord && chord.slot < 0) {
+                        const auto& combo = gp ? hk.gp : hk.kb;
+                        const auto& down = gp ? keys.gpDown : keys.kbDown;
+                        const int held = ComboHeldCount(combo, down);
+                        if (held >= 2) chord = {t, held < ComboKeyCount(combo) ? "chord" : "complete"};
+                    }
+                }
+            }
+            return chord;
+        }
+
+        // When a slot activates, every held-back or queued event whose button belongs to its combo is dropped: the
+        // game never sees it, and its fate becomes Consumed (spec 004, research R3a and R11).
+        void ConsumeHeldBackForCombo(int winner, const SlotHotkeys& hk, int n, ExclusiveStore& excl,
+                                     RetainedArr& retained, DeferredVec& deferred) {
+            auto consumeIfOwned = [&](const RetainedEvent& ev) {
+                const bool gp = IsGamepadEvent(ev);
+                const int code = EffectiveComboCode(ev.dev, ev.rawIdCode);
+                if (!ComboHasCode(hk, gp, code)) return false;
+                ResolveFate(ev, PressFate::Consumed, excl);
+                if (IsPressOrRelease(ev))
+                    MAGIC_DEBUG_LOG("[Input] HoldBack: {} consumed by slot={}", DescribeHeldCode(code, gp), winner);
+                return true;
+            };
+            for (int t = 0; t < n; ++t) {
+                const auto ts = static_cast<std::size_t>(t);
+                const auto removed = std::erase_if(retained[ts], consumeIfOwned);
+                if (removed > 0 && retained[ts].empty() && excl.filterWindowActive[ts]) CloseFilterWindow(ts, excl);
+            }
+            std::erase_if(deferred, [&](const DeferredReplayEvent& d) { return consumeIfOwned(d.ev); });
+        }
+
+        // Does `b` beat `a` on one device? A strictly longer containing combo wins; for identical combos the lower slot
+        // wins, but only between two slots rising in the same frame (spec 004, research R4, FR-009).
+        [[nodiscard]] bool BeatsOnDevice(const std::array<int, 3>& ca, const std::array<int, 3>& cb, bool bothDown,
+                                         bool bRising, bool bLower, bool& identical) {
+            if (!bothDown) return false;
+            if (ComboStrictSubset(ca, cb)) {
+                identical = false;
+                return true;
+            }
+            if (bRising && bLower && ComboSameKeys(ca, cb)) {
+                identical = true;
+                return true;
+            }
+            return false;
+        }
+
+        // Pass 2 of RecomputeSlotEdges: among slots rising this frame, the longest combo completed at that moment wins;
+        // a loser is suppressed until its combo is released (spec 004, research R4, FR-009).
+        void ResolveOverlaps(int n, const HotkeyCacheStore& cache, ExclusiveStore& excl, const SlotFlags& kb,
+                             const SlotFlags& gp, const SlotFlags& prev, SlotFlags& acc, ReplayArr& replay,
+                             RetainedArr& retained, DeferredVec& deferred) {
+            for (int a = 0; a < n; ++a) {
+                const auto sa = static_cast<std::size_t>(a);
+                if (!acc[sa] || prev[sa]) continue;
+                const auto& ha = cache.slots[sa];
+                for (int b = 0; b < n; ++b) {
+                    if (b == a) continue;
+                    const auto sb = static_cast<std::size_t>(b);
+                    const bool bRising = acc[sb] && !prev[sb];
+                    if (!bRising && excl.pendingSrc[sb] == PendingSrc::None) continue;
+                    const auto& hb = cache.slots[sb];
+                    bool identical = false;
+                    const bool lost = BeatsOnDevice(ha.kb, hb.kb, kb[sa] && kb[sb], bRising, b < a, identical) ||
+                                      BeatsOnDevice(ha.gp, hb.gp, gp[sa] && gp[sb], bRising, b < a, identical);
+                    if (!lost) continue;
+                    acc[sa] = false;
+                    excl.suppressedUntilRelease[sa] = true;
+                    DiscardExclusivePending(sa, excl, replay, retained, deferred);
+                    MAGIC_DEBUG_LOG("[Input] RecomputeSlotEdges: slot={} SUPPRESSED by slot={} ({})", a, b,
+                                    identical ? "identical combo" : "longer combo");
+                    break;
+                }
+            }
         }
 
         bool ComputeAcceptedExclusive(int slot, const SlotHotkeys& hk, bool prevAccepted, bool kbNow, bool gpNow,
@@ -117,12 +252,12 @@ namespace Input::detail {
                             return false;
                         }
                         excl.fullComboSeen[s] = true;
-                        excl.pendingTimer[s] = kFilterReplayDelaySec;
+                        excl.pendingTimer[s] = kComboToleranceSec;
 
                         MAGIC_DEBUG_LOG(
                             "[Input] ComputeAcceptedExclusive: slot={} multi-key full combo seen, timer reset to "
                             "{:.3f}s",
-                            slot, kFilterReplayDelaySec);
+                            slot, kComboToleranceSec);
                     }
 
                     if (!stillDown) {
@@ -216,7 +351,7 @@ namespace Input::detail {
                         return false;
                     }
                     excl.pendingSrc[s] = PendingSrc::Kb;
-                    excl.pendingTimer[s] = kFilterReplayDelaySec;
+                    excl.pendingTimer[s] = kbIsMulti ? kComboToleranceSec : kSingleKeyAcceptDelaySec;
                     excl.fullComboSeen[s] = false;
                     return false;
                 }
@@ -239,7 +374,7 @@ namespace Input::detail {
                         return false;
                     }
                     excl.pendingSrc[s] = PendingSrc::Gp;
-                    excl.pendingTimer[s] = kFilterReplayDelaySec;
+                    excl.pendingTimer[s] = gpIsMulti ? kComboToleranceSec : kSingleKeyAcceptDelaySec;
                     excl.fullComboSeen[s] = false;
                     return false;
                 }
@@ -254,6 +389,32 @@ namespace Input::detail {
             return false;
         }
 
+        // Pass 1 of RecomputeSlotEdges for one slot: acceptance as before. A slot that lost an overlap stays inactive
+        // until its combo is released (spec 004, research R4).
+        bool ComputeSlotAcceptance(int slot, const SlotHotkeys& hk, bool kbNow, bool gpNow, bool prevAcc, float dt,
+                                   ExclusiveStore& excl, SlotEdgeStore& slots, const KeyStateStore& keys,
+                                   const IntegratedMagic::Config::IPatchSettings& patches, ReplayArr& replay,
+                                   RetainedArr& retained, DeferredVec& deferred) {
+            const auto s = static_cast<std::size_t>(slot);
+            const bool rawNow = kbNow || gpNow;
+            if (excl.suppressedUntilRelease[s]) {
+                if (rawNow) {
+                    excl.prevRawKbDown[s] = kbNow;
+                    excl.prevRawGpDown[s] = gpNow;
+                    DiscardExclusivePending(s, excl, replay, retained, deferred);
+                    return false;
+                }
+                excl.suppressedUntilRelease[s] = false;
+            }
+            if (patches.RequireExclusiveHotkey() || slots.slotIsMultiKey[s]) {
+                return ComputeAcceptedExclusive(slot, hk, prevAcc, kbNow, gpNow, rawNow, dt, excl, slots, keys, replay,
+                                                retained, deferred, patches);
+            }
+            excl.prevRawKbDown[s] = kbNow;
+            excl.prevRawGpDown[s] = gpNow;
+            DiscardExclusivePending(s, excl, replay, retained, deferred);
+            return rawNow;
+        }
     }
 
     void DiscardExclusivePending(std::size_t s, ExclusiveStore& excl, ReplayArr& replay, RetainedArr& retained,
@@ -263,8 +424,9 @@ namespace Input::detail {
                             static_cast<int>(std::to_underlying(excl.pendingSrc[s])), retained[s].size());
         }
 
-        excl.filterWindowActive[s] = false;
-        excl.filterWindowTimer[s] = 0.f;
+        CloseFilterWindow(s, excl);
+        // Discarded presses never reach the game, so their held repeats and releases must not reach it alone (R11).
+        ResolveFates(retained[s], PressFate::Consumed, excl);
         retained[s].clear();
         ClearDeferredReplayEventsForSlot(s, deferred);
         excl.pendingSrc[s] = PendingSrc::None;
@@ -287,25 +449,24 @@ namespace Input::detail {
             ClearDeferredReplayEventsForSlot(s, deferred);
             ResetReplayState(s, replay);
             if (excl.filterWindowActive[s]) {
-                excl.filterWindowActive[s] = false;
+                // Expire the window now: TickFilterWindows decides next frame whether another slot still needs these
+                // buttons or they go to the game (spec 004, research R3d). Costs about one frame on this path only.
                 excl.filterWindowTimer[s] = 0.f;
-                for (auto const& ev : retained[s]) {
-                    MAGIC_DEBUG_LOG(
-                        "[Input] ClearExclusivePending: slot={} queue replay dev={} value={:.2f} heldSecs={:.3f}", s,
-                        static_cast<int>(ev.dev), ev.value, ev.heldSecs);
-
-                    QueueDeferredReplayEvent(s, ev, deferred);
-                }
+                MAGIC_DEBUG_LOG("[Input] ClearExclusivePending: slot={} {} held-back event(s) deferred to window", s,
+                                retained[s].size());
+            } else {
+                ResolveFates(retained[s], PressFate::Passed, excl);
+                retained[s].clear();
             }
             excl.simWindowActive[s] = false;
             excl.simWindowRemaining[s] = 0.f;
         } else {
-            excl.filterWindowActive[s] = false;
-            excl.filterWindowTimer[s] = 0.f;
+            CloseFilterWindow(s, excl);
             ClearDeferredReplayEventsForSlot(s, deferred);
             ResetReplayState(s, replay);
+            ResolveFates(retained[s], PressFate::Consumed, excl);
+            retained[s].clear();
         }
-        retained[s].clear();
         excl.pendingSrc[s] = PendingSrc::None;
         excl.pendingTimer[s] = 0.0f;
         excl.fullComboSeen[s] = false;
@@ -331,7 +492,11 @@ namespace Input::detail {
             excl.filterWindowActive[s] = false;
             excl.filterWindowTimer[s] = 0.f;
             DiscardExclusivePending(s, excl, replay, retained, deferred);
+            excl.suppressedUntilRelease[s] = false;
+            excl.heldBackSecs[s] = 0.f;
+            excl.contestedLogged[s] = false;
         }
+        ResetAllFates(excl);
         slots.pressedMask.store(0uLL, std::memory_order_relaxed);
         slots.releasedMask.store(0uLL, std::memory_order_relaxed);
     }
@@ -374,7 +539,11 @@ namespace Input::detail {
             excl.filterWindowActive[s] = false;
             excl.filterWindowTimer[s] = 0.f;
             excl.deactivatedThisPress[s] = false;
+            excl.suppressedUntilRelease[s] = false;
+            excl.heldBackSecs[s] = 0.f;
+            excl.contestedLogged[s] = false;
         }
+        ResetAllFates(excl);
         slots.pressedMask.store(0uLL, std::memory_order_relaxed);
         slots.releasedMask.store(0uLL, std::memory_order_relaxed);
     }
@@ -383,58 +552,86 @@ namespace Input::detail {
                             const KeyStateStore& keys, const IntegratedMagic::Config::IPatchSettings& patches,
                             ReplayArr& replay, RetainedArr& retained, DeferredVec& deferred, bool spellSystemActive,
                             int activeSlot) {
-        TickFilterWindows(dt, excl, slots, retained, deferred);
+        TickFilterWindows(dt, excl, slots, cache, keys, retained, deferred);
 
         const int n = slots.ActiveSlots();
+        SlotFlags kbArr{};
+        SlotFlags gpArr{};
+        SlotFlags rawArr{};
+        SlotFlags prevArr{};
+        SlotFlags accArr{};
+
+        // Pass 1: per-slot acceptance.
         for (int slot = 0; slot < n; ++slot) {
             const auto s = static_cast<std::size_t>(slot);
             const auto& hk = cache.slots[s];
-            const bool kbNow = ComboDown(hk.kb, keys.kbDown);
-            const bool gpNow = ComboDown(hk.gp, keys.gpDown);
-            const bool rawNow = kbNow || gpNow;
-            const bool prevAcc = slots.slotDown[s].load(std::memory_order_relaxed);
+            kbArr[s] = ComboDown(hk.kb, keys.kbDown);
+            gpArr[s] = ComboDown(hk.gp, keys.gpDown);
+            rawArr[s] = kbArr[s] || gpArr[s];
+            prevArr[s] = slots.slotDown[s].load(std::memory_order_relaxed);
+            accArr[s] = ComputeSlotAcceptance(slot, hk, kbArr[s], gpArr[s], prevArr[s], dt, excl, slots, keys, patches,
+                                              replay, retained, deferred);
+        }
 
-            bool accNow = false;
-            if (patches.RequireExclusiveHotkey() || slots.slotIsMultiKey[s]) {
-                accNow = ComputeAcceptedExclusive(slot, hk, prevAcc, kbNow, gpNow, rawNow, dt, excl, slots, keys,
-                                                  replay, retained, deferred, patches);
-            } else {
-                excl.prevRawKbDown[s] = kbNow;
-                excl.prevRawGpDown[s] = gpNow;
-                DiscardExclusivePending(s, excl, replay, retained, deferred);
-                accNow = rawNow;
-            }
+        // Pass 2: longest combo completed at the same moment wins (FR-009).
+        ResolveOverlaps(n, cache, excl, kbArr, gpArr, prevArr, accArr, replay, retained, deferred);
 
-            if (accNow != prevAcc) {
+        // Pass 3: publish edges; an activation consumes every held-back button of its combo (R3a).
+        for (int slot = 0; slot < n; ++slot) {
+            const auto s = static_cast<std::size_t>(slot);
+            const bool accNow = accArr[s];
+            if (accNow != prevArr[s]) {
                 MAGIC_DEBUG_LOG("[Input] RecomputeSlotEdges: slot={} EDGE {} (kb={} gp={} exclusive={} multiKey={})",
-                                slot, accNow ? "PRESSED" : "RELEASED", kbNow, gpNow, patches.RequireExclusiveHotkey(),
-                                slots.slotIsMultiKey[s]);
+                                slot, accNow ? "PRESSED" : "RELEASED", kbArr[s], gpArr[s],
+                                patches.RequireExclusiveHotkey(), slots.slotIsMultiKey[s]);
 
                 slots.slotDown[s].store(accNow, std::memory_order_relaxed);
                 AtomicFetchOrU64(accNow ? slots.pressedMask : slots.releasedMask, (1uLL << slot));
+                if (accNow) ConsumeHeldBackForCombo(slot, cache.slots[s], n, excl, retained, deferred);
             }
 
             if (accNow)
                 slots.slotWasAccepted[s] = true;
-            else if (!rawNow) {
+            else if (!rawArr[s]) {
                 if (!spellSystemActive || activeSlot != slot) slots.slotWasAccepted[s] = false;
             }
         }
     }
 
-    void TickFilterWindows(float dt, ExclusiveStore& excl, SlotEdgeStore& slots, RetainedArr& retained,
-                           DeferredVec& deferred) {
+    void TickFilterWindows(float dt, ExclusiveStore& excl, SlotEdgeStore& slots, const HotkeyCacheStore& cache,
+                           const KeyStateStore& keys, RetainedArr& retained, DeferredVec& deferred) {
         const int n = slots.ActiveSlots();
         for (int slot = 0; slot < n; ++slot) {
             const auto s = static_cast<std::size_t>(slot);
             if (!excl.filterWindowActive[s]) continue;
+            excl.heldBackSecs[s] += dt;
             excl.filterWindowTimer[s] -= dt;
             if (excl.filterWindowTimer[s] > 0.f) continue;
 
-            excl.filterWindowActive[s] = false;
-            for (auto const& ev : retained[s]) QueueDeferredReplayEvent(s, ev, deferred);
+            // Keep holding while a slot that uses one of these buttons is pending, or a chord is in progress (R3b/R3c).
+            if (const auto reason = FindHoldReason(s, dt, excl, cache, keys, retained, n); reason.slot >= 0) {
+                excl.filterWindowTimer[s] = 0.f;
+                if (!excl.contestedLogged[s]) {
+                    excl.contestedLogged[s] = true;
+                    MAGIC_DEBUG_LOG("[Input] HoldBack: slot={} window extended (slot={} {})", slot, reason.slot,
+                                    reason.why);
+                }
+                continue;
+            }
+
+            // Nothing needs them: hand the held-back events to the game, as before (FR-003). Their held repeats and
+            // releases follow them (R11).
+            ResolveFates(retained[s], PressFate::Passed, excl);
+            for (auto const& ev : retained[s]) {
+                if (IsPressOrRelease(ev)) {
+                    MAGIC_DEBUG_LOG("[Input] HoldBack: {} handed to game (slot={})",
+                                    DescribeHeldCode(EffectiveComboCode(ev.dev, ev.rawIdCode), IsGamepadEvent(ev)),
+                                    slot);
+                }
+                QueueDeferredReplayEvent(s, ev, deferred);
+            }
             retained[s].clear();
+            CloseFilterWindow(s, excl);
         }
     }
-
 }

@@ -19,7 +19,17 @@ inline constexpr int kMouseHeartbeatTimeoutMs = 500;
     return id >= kMouseFirstNoVkId && id <= kMouseLastNoVkId;
 }
 
-inline constexpr float kFilterReplayDelaySec = 0.04f;
+// Combo tolerance for combos of 2+ buttons (spec 004): the time allowed between two consecutive buttons of a combo.
+// A fresh press of a combo button is held back this long before it goes to the game, and a multi-button slot waits
+// this long after its full combo before it activates, so a longer combo completed right after can still win.
+inline constexpr float kComboToleranceSec = 0.05f;
+// Wait before a single-key slot activates while still held (Require exclusive hotkey on).
+inline constexpr float kSingleKeyAcceptDelaySec = 0.04f;
+// Max hold for a button while a slot containing it is still pending (spec 004, research R3b).
+inline constexpr float kMaxContestedHoldSec = 0.5f;
+// Max hold while a chord is in progress: 2+ buttons of a combo held but not complete (spec 004, research R3c).
+// Combos have at most 3 buttons, so this is two gaps of kComboToleranceSec.
+inline constexpr float kMaxChordHoldSec = 2.f * kComboToleranceSec;
 inline constexpr float kPressBothAtSameTimeWindowSec = 0.2f;
 
 inline constexpr int kDIK_W = 0x11;

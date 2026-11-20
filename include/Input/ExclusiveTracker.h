@@ -49,6 +49,6 @@ namespace Input::detail {
                             ReplayArr& replay, RetainedArr& retained, DeferredVec& deferred, bool spellSystemActive,
                             int activeSlot);
 
-    void TickFilterWindows(float dt, ExclusiveStore& excl, SlotEdgeStore& slots, RetainedArr& retained,
-                           DeferredVec& deferred);
+    void TickFilterWindows(float dt, ExclusiveStore& excl, SlotEdgeStore& slots, const HotkeyCacheStore& cache,
+                           const KeyStateStore& keys, RetainedArr& retained, DeferredVec& deferred);
 }
