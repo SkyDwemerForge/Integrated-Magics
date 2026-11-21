@@ -34,6 +34,7 @@ Bloqueante: se algum item falhar, o resto da matriz não pode ser executado. Ver
 - [ ] **0.2** `IntegratedMagic.log` contém as seis linhas `[Hooks] ... installed` (PollInputDevicesHook, PlayerAnimGraphHook, D3DInitHook, DXGIPresentHook, MagicCasterInterruptHook, MagicCasterStartCastHook) e `[Hooks] hook space: 42 / 128 B used (33%), ...`, sem nenhuma linha `[Hooks]` de warn ou critical
 - [ ] **0.3** Iniciar com o load order completo de plugins SKSE → mesmo resultado de 0.1 e 0.2
 - [ ] **0.4** Repetir 0.1–0.3 no SE e no AE
+- [x] **0.5** Primeira captura de hotkey no SKSE menu → `[Hooks] MenuInputShieldHook installed (outer, previous target in <módulo>)` uma única vez, sem `[Hooks]` de warn ou critical. `<módulo>` é o hook que estava por fora antes (no teste de validação, `InputManager.dll`, do mod Input Manager) (spec `specs/009-fix-capture-input-leak/`)
 
 ---
 
@@ -280,6 +281,21 @@ Magic Menu: atalhos de slot e da wheel sem acionar funções do menu (spec `spec
 - [x] **10.17** Hotkeys sobrepostas (ex.: `RT + LT + A` e `RT + A`): atribuir com a mais longa 10×, em ordens
   diferentes → só o slot dela recebe a spell (log `QuickBind: ... SUPPRESSED by slot=`); atribuir com a mais curta
   10× → só o slot dela recebe, em até 0,3 s ou na soltura
+
+Captura de hotkey no SKSE menu sem o menu reagir ao input capturado (spec `specs/009-fix-capture-input-leak/`):
+
+- [ ] **10.18** Campo de gamepad: capturar cada um dos 16 botões/gatilhos (D-pad, Start, Back, L3, R3, LB, RB, A, B,
+  X, Y, LT, RT) → cada valor gravado; o menu não move o foco, não ativa nada, não volta, não fecha, não abre o seletor
+  de janelas; D-pad segurado não move o foco até soltar
+- [ ] **10.19** Campo de teclado: capturar setas, `Enter`, `Space`, `Tab` e os botões esquerdo, direito e do meio do
+  mouse sobre outro controle → valor gravado e nenhum controle reage
+- [ ] **10.20** Ativar "Cap" com `A` do gamepad, e com `Enter`/`Space` no teclado → esse mesmo botão/tecla não é
+  capturado; a captura continua esperando
+- [ ] **10.21** Outro dispositivo durante a captura (gamepad num campo de teclado, tecla num campo de gamepad), 5× cada
+  → captura cancelada, campo sem mudança, menu sem reação; `Escape` cancela a captura e o SKSE menu continua aberto
+  (um segundo `Escape`, depois de soltar, fecha o menu)
+- [ ] **10.22** Depois de cada captura, ao soltar tudo, o menu reage normalmente no primeiro aperto; fechar o SKSE menu
+  durante uma captura e reabrir → nada capturado e navegação normal
 
 ---
 

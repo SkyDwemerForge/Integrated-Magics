@@ -14,6 +14,7 @@
 #include "SKSEMenuFramework.h"
 #include "Shared/CaptureState.h"
 #include "Shared/SpellType.h"
+#include "UI/CaptureInputGuard.h"
 #include "UI/HudManager.h"
 #include "UI/PolyFill.h"
 #include "UI/Strings.h"
@@ -85,18 +86,26 @@ namespace {
         ImGuiMCP::SameLine();
 
         if (const bool isThis = g_fieldCapture.active && g_fieldCapture.field == &field; isThis) {
-            if (const int encoded = CaptureState::Get().Poll(); encoded != -1) {
+            auto& cap = CaptureState::Get();
+            if (const int encoded = cap.Poll(); encoded != -1) {
                 const bool gotKb = (encoded >= 0);
                 if (gotKb == wantKeyboard) {
                     const int val = wantKeyboard ? encoded : -(encoded + 2);
                     field.store(val, std::memory_order_relaxed);
                     dirty = true;
                     g_fieldCapture = {};
-                    CaptureState::Get().captureActive.store(false, std::memory_order_relaxed);
+                    cap.captureActive.store(false, std::memory_order_relaxed);
                 } else {
-                    CaptureState::Get().Request();
-                    CaptureState::Get().captureActive.store(true, std::memory_order_relaxed);
+                    // The other device cancels the capture and leaves the field unchanged (spec 009, FR-010).
+                    MAGIC_DEBUG_LOG("[UI] Capture: {} input during a {} capture -> cancelled", gotKb ? "kb" : "gp",
+                                    wantKeyboard ? "kb" : "gp");
+                    CancelFieldCapture();
                 }
+            } else if (!cap.captureRequested.load(std::memory_order_relaxed) &&
+                       !cap.captureActive.load(std::memory_order_relaxed)) {
+                // Cancelled elsewhere (Escape, or the page was not shown): this field no longer waits (spec 009, R6).
+                MAGIC_DEBUG_LOG("[UI] Capture: stale field capture cleared");
+                g_fieldCapture = {};
             }
 
             ImGuiMCP::TextDisabled("...");
@@ -1419,6 +1428,8 @@ namespace {
 }
 
 void __stdcall IntegratedMagic::MENU::DrawSettings() {
+    // A capture waits only while this page is drawn (spec 009, R6).
+    IntegratedMagic::CaptureGuard::NoteCapturePageDrawn();
     auto& cfg = IntegratedMagic::GetMagicConfig();
     bool dirty = false;
 

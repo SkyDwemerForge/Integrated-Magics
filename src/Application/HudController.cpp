@@ -10,6 +10,7 @@
 #include "Domain/State.h"
 #include "PCH.h"
 #include "Shared/InputIntents.h"
+#include "UI/CaptureInputGuard.h"
 #include "UI/FontLoader.h"
 #include "UI/HudFrameLogic.h"
 #include "UI/HudManager.h"
@@ -190,6 +191,16 @@ namespace Application {
         ImGui::Render();
         ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
     }
+
+    void HudController::UpdateCaptureGuard(bool captureWaiting, bool anyInputHeld) {
+        IntegratedMagic::CaptureGuard::UpdateCaptureInputGuard(captureWaiting, anyInputHeld);
+    }
+
+    bool HudController::CaptureGuardWantsHeldState() const {
+        return IntegratedMagic::CaptureGuard::CaptureGuardWantsHeldState();
+    }
+
+    bool HudController::ShouldHideMenuInput() const { return IntegratedMagic::CaptureGuard::ShouldHideMenuInput(); }
 
     void HudController::OnWindowMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
         if (uMsg == WM_KILLFOCUS) {
