@@ -45,6 +45,10 @@ namespace IntegratedMagic {
         float startRequestSecs{0.f};
         // Time the current attempt has spent without a stable cast; restarts do not reset it (spec 005, R7).
         float startFailSecs{0.f};
+        // Drawn activation: time spent waiting for the game's equip/draw animation, which does not count toward
+        // startFailSecs, and whether that wait is running now (spec 007, R11). Reset with startFailSecs.
+        float equipAnimGraceSecs{0.f};
+        bool equipAnimGraceActive{false};
         float castingElapsedSecs{0.f};
         bool waitingSpellFireFinalize{false};
         float spellFireFinalizeSecs{0.f};
@@ -257,6 +261,8 @@ namespace IntegratedMagic {
         static constexpr float kMaxActiveTimeoutSecs = 30.f;
         // Retry bound: a plugin-cast hand with no stable cast after this long ends the session (spec 005, Q2, R7).
         static constexpr float kMaxCastStartSecs = 1.0f;
+        // At most this much equip/draw animation time is kept out of the retry bound (spec 007, Constitution III).
+        static constexpr float kMaxEquipAnimGraceSecs = 2.0f;
         // Interruptions below this cast time are spurious; a cast past it is real (R7, R12).
         static constexpr float kSpuriousInterruptWindowSecs = 0.2f;
     };

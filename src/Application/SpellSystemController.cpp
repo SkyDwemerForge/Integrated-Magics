@@ -9,6 +9,7 @@
 #include "Domain/SlotCooldownTracker.h"
 #include "Domain/State.h"
 #include "PCH.h"
+#include "Shared/HandDiagnostics.h"
 
 namespace Application {
 
@@ -206,6 +207,8 @@ namespace Application {
     }
 
     void SpellSystemController::DispatchAttackPress(IntegratedMagic::Hand hand) const {
+        MAGIC_DEBUG_LOG("[SpellSystem] Press hands: hand={} {}", hand == IntegratedMagic::Hand::Left ? "L" : "R",
+                        IntegratedMagic::DescribeHandsForLog(RE::PlayerCharacter::GetSingleton()));
         // The game must not see the player's own attack/block button held when the plugin presses: release it first,
         // in the same queue, so the handler gets the release before the press (R5, contract §3).
         const auto taken = InputController::Get().TakeHeldHandButtons();
@@ -331,6 +334,8 @@ namespace Application {
         auto* mgr = RE::ActorEquipManager::GetSingleton();
         if (!player || !mgr || !plan.valid) return;
 
+        MAGIC_DEBUG_LOG("[SpellSystem] Restore hands (before): {}", IntegratedMagic::DescribeHandsForLog(player));
+
         if (plan.applySkipEquipAnimReturn) {
             IntegratedMagic::MagicAction::ApplySkipEquipAnimReturn(player, plan.skipEquipAnimReturn);
         }
@@ -414,6 +419,8 @@ namespace Application {
                 player, mgr, plan.inventoryIndex,
                 const_cast<std::vector<IntegratedMagic::ExtraEquippedItem>&>(plan.prevExtraEquipped));
         }
+
+        MAGIC_DEBUG_LOG("[SpellSystem] Restore hands (after): {}", IntegratedMagic::DescribeHandsForLog(player));
     }
 
     void SpellSystemController::HandleExitAllResult(IntegratedMagic::StateExitResult result) const {
