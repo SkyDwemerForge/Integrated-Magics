@@ -7,6 +7,7 @@
 #include "Domain/State.h"
 #include "PCH.h"
 #include "Shared/Hand.h"
+#include "Shared/HandDiagnostics.h"
 #include "Shared/InventoryUtil.h"
 #include "Shared/SpellTypeDetector.h"
 
@@ -121,6 +122,8 @@ namespace IntegratedMagic {
         hm.autoCastPhase = AutoCastPhase::StartRequested;
         hm.startRequestSecs = 0.f;
         hm.startFailSecs = 0.f;
+        hm.equipAnimGraceSecs = 0.f;
+        hm.equipAnimGraceActive = false;
         hm.chargeSkipped = false;
         hm.skipMagickaOwed = 0.f;
 
@@ -305,8 +308,30 @@ namespace IntegratedMagic {
         }
 
         // Total time without a stable cast, including deferred-restart frames; restarts never reset it (spec 005, R7).
-        if (IsPluginCast(hm) && hm.autoCastPhase == AutoCastPhase::StartRequested)
-            hm.startFailSecs += dt > 0.f ? dt : 0.f;
+        if (IsPluginCast(hm) && hm.autoCastPhase == AutoCastPhase::StartRequested) {
+            const float step = dt > 0.f ? dt : 0.f;
+            // Drawn activation: a spell equipped during the draw restarts the game's draw animation (~1.4 s with
+            // Skip Equip Animation OFF), and a left-hand cast cannot begin before it ends. That time does not count
+            // toward the retry bound, up to kMaxEquipAnimGraceSecs (spec 007, R11, Constitution III).
+            const bool equipAnim = !_session.wasHandsDown && hm.equipAnimGraceSecs < kMaxEquipAnimGraceSecs &&
+                                   IsEquipAnimationPlaying(GetPlayer());
+            if (equipAnim) {
+                if (!hm.equipAnimGraceActive) {
+                    hm.equipAnimGraceActive = true;
+                    MAGIC_DEBUG_LOG("[FLOW] EquipAnimGrace: hand={} equip animation playing -> retry bound paused",
+                                    IsLeft(hand) ? "L" : "R");
+                }
+                hm.equipAnimGraceSecs += step;
+            } else {
+                if (hm.equipAnimGraceActive) {
+                    hm.equipAnimGraceActive = false;
+                    MAGIC_DEBUG_LOG("[FLOW] EquipAnimGrace: hand={} retry bound resumes after {:.2f}s ({})",
+                                    IsLeft(hand) ? "L" : "R", hm.equipAnimGraceSecs,
+                                    hm.equipAnimGraceSecs >= kMaxEquipAnimGraceSecs ? "cap reached" : "animation done");
+                }
+                hm.startFailSecs += step;
+            }
+        }
 
         if (hm.pendingRestartNextFrame) {
             if (_session.isDualCasting) {
@@ -423,7 +448,11 @@ namespace IntegratedMagic {
         if (hm.autoCastPhase == AutoCastPhase::Casting) {
             hm.castingElapsedSecs += dt > 0.f ? dt : 0.f;
             // A cast that lasts past the spurious window is real: the attempt succeeded (R7).
-            if (hm.castingElapsedSecs >= kSpuriousInterruptWindowSecs) hm.startFailSecs = 0.f;
+            if (hm.castingElapsedSecs >= kSpuriousInterruptWindowSecs) {
+                hm.startFailSecs = 0.f;
+                hm.equipAnimGraceSecs = 0.f;
+                hm.equipAnimGraceActive = false;
+            }
         }
 
         if (hm.autoActive && hm.autoCastPhase == AutoCastPhase::Casting && hm.waitingChargeComplete) {

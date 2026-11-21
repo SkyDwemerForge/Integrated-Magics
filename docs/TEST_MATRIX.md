@@ -179,6 +179,25 @@ Gamepad × slots compartilhando botões (spec `specs/004-fix-gamepad-slot-priori
 - [ ] **7.9** Itens "extra equipped" (overlay) → `prevExtraEquipped` restaurado
 - [ ] **7.10** Restore após sheathe (`pendingRestoreAfterSheathe`) → aguarda anim de embainhar antes de restaurar
 
+Armas sacadas com arma/escudo na mão esquerda (spec `specs/007-fix-drawn-weapon-cast/`). Rodar com Skip Equip
+Animation e Skip Equip Animation on Return desligados e depois ligados. Slots em Automatic salvo indicação:
+
+- [ ] **7.11** Duas espadas diferentes, armas sacadas: slot de mão esquerda, de mão direita e dual, 10× seguidas cada →
+  todas conjuram; as duas espadas voltam às mãos certas, ainda sacadas
+- [ ] **7.12** Duas cópias da mesma espada, armas sacadas: mesmo teste do 7.11 → todas conjuram; as duas espadas voltam
+  e nenhuma mão fica vazia
+- [ ] **7.13** Espada + escudo, armas sacadas: mesmo teste do 7.11 → todas conjuram; espada e escudo voltam, ainda
+  sacados
+- [ ] **7.14** Sequência do relato (7.11 e 7.13): embainhar → conjurar → sacar → conjurar 5× → as 6 conjurações
+  funcionam, não só a primeira depois de sacar
+- [ ] **7.15** Logo depois de o equipamento voltar (espada + escudo): um ataque e uma defesa funcionam no primeiro
+  aperto, sem embainhar
+- [ ] **7.16** Hold e Press com auto-ataque, duas espadas e espada + escudo, armas sacadas, 5 usos cada → conjuram como
+  com magia nas duas mãos
+- [x] **7.17** Skip Equip Animation desligado, arma na mão esquerda: sacar e ativar o slot de mão esquerda **durante a
+  animação de sacar**, 5× → conjura quando a animação termina (cerca de 1,5 s), sem cancelar. O log mostra
+  `EquipAnimGrace: ... retry bound paused` e não mostra `cast did not start`
+
 ---
 
 ## 8. Interrupções e saídas forçadas

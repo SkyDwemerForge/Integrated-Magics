@@ -151,6 +151,7 @@ DXGIPresentHook → HudManager::DrawHudFrame()
 - `skipMagickaOwed` — Skip Channeling: the charge cost the game did not drain because the charge was skipped. Set with `chargeSkipped`, paid by `OnSpellFired` (`SpellFiredResult::magickaToDrain`), and reset in the same places as `chargeSkipped`, so a failed attempt costs nothing extra
 - `startRequestSecs` — time spent in `StartRequested` before timing out and retrying
 - `startFailSecs` — total time the current attempt has spent without a stable cast. Restarts do not reset it; `RequestAutoAttackStart`, `FinishHand`, every `HandMode` reset and a cast lasting `kSpuriousInterruptWindowSecs` (0.2 s) do. At `kMaxCastStartSecs` (1.0 s) the session ends (spec 005)
+- `equipAnimGraceSecs` / `equipAnimGraceActive` — drawn activation only: time the game spent playing its equip/draw animation (`IsEquipping`), which goes here instead of `startFailSecs`, at most `kMaxEquipAnimGraceSecs` (2.0 s). Reset wherever `startFailSecs` is (spec 007)
 - `castingElapsedSecs` — elapsed time since cast confirmed (Casting phase)
 - `waitingSpellFireFinalize` — waiting for spell fire event or caster idle to finalize
 - `spellFireFinalizeSecs` — time since spell fire finalize was scheduled
@@ -198,6 +199,11 @@ For `Automatic` (and `Hold` with `wantAutoAttack`), the plugin drives the cast v
    - If interrupted by a spurious `OnCasterInterrupt` (pre-cast noise): releases UP, sets `pendingRestartNextFrame`. On the next frame, goes DOWN again.
    - If `kRedispatchInterval` (0.15 s) elapses without progress: same UP → DOWN restart.
    - **Retry bound**: when a plugin-cast hand's `startFailSecs` reaches `kMaxCastStartSecs` (1.0 s), `PumpAutomatic` ends the session through `ForceExit` (the same exit as the 30 s timeout), before pumping the cast phases. Log: `PumpAutomatic: hand=<L|R> cast did not start in <s>s -> ForceExit`. See `specs/005-fix-left-hand-block/`.
+   - **Equip-animation pause** (spec 007): in a drawn activation, while the game reports `IsEquipping` (read through `IsEquipAnimationPlaying` in `Shared/HandDiagnostics.h`), `PumpCastPhase` adds the frame time to `equipAnimGraceSecs` instead of `startFailSecs`, for at most 2.0 s per attempt. The presses do not change.
+     - **Why**: with Skip Equip Animation OFF, a spell equipped in the left hand during the draw restarts the draw animation (about 1.4 s), and a left-hand cast begins only after that animation ends.
+     - **Dual cast**: both hands read the same variable, so they pause together.
+     - **Logs**: `[FLOW] EquipAnimGrace: hand=<L|R> equip animation playing -> retry bound paused` and `... retry bound resumes after <s>s (animation done|cap reached)`.
+     - See `specs/007-fix-drawn-weapon-cast/` (research R11).
    - **Dual-cast sync**: in dual-cast mode, whenever one hand restarts, the other is also released so both hands go DOWN together on the same frame — required for the game's behavior machine to stay in dual-cast mode.
 2. **Casting** — caster reached `kUnk02`. Accumulates `castingElapsedSecs`. Waits for `IsChargeComplete`.  
    - `SkipChanneling` patch (Automatic, or Press with auto-attack): once per attempt, when the caster is in `kUnk02` and the slot spell is classified `Cast` or `Bound` (`DetectSpellType`) with charge time > 0, the domain emits `forceChargeComplete`. `SpellSystemController` then calls `MagicAction::ForceChargeComplete`, which zeroes `castingTimer`.
@@ -367,18 +373,25 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 | Adding a new config option | `include/Config/Config.h` + relevant `Ports/` file + `src/Config/ConfigAdapter.cpp` |
 | Save/load slot assignments | `include/Persistence/SaveSpellDB.h`, `src/Persistence/SaveSpellDB.cpp` |
 | Global spell settings (mode, auto-attack) | `include/Persistence/SpellSettingsDB.h` |
+| Slot fails with weapons drawn and a weapon or shield in a hand (draw restarts, `cast did not start`) | `src/Domain/MagicStatePump.cpp` (`PumpCastPhase` equip-animation pause, `PumpAutomatic` retry bound), `include/Shared/HandDiagnostics.h`. Check the `Activation hands:` / `Press hands:` lines first (`eq=1/0` = the game's equip animation is playing). See `specs/007-fix-drawn-weapon-cast/` |
 
 ---
 
 ## Debug logging
 
-Enabled only in DEBUG builds. Macro: `MAGIC_DEBUG_LOG(fmt, ...)`. Output: `%LOCALAPPDATA%\Skyrim Special Edition\SKSE\IntegratedMagic.log`.
+Enabled only in DEBUG builds. Macro: `MAGIC_DEBUG_LOG(fmt, ...)`. Output: `IntegratedMagic.log` in SKSE's log folder (`SKSE::log::log_directory()`, i.e. `Documents\My Games\Skyrim Special Edition\SKSE`). It is written line by line and emptied at each game launch.
 
 Key prefixes in logs:
 - `[FLOW]` — high-level cast flow events
 - `[State]` — MagicState transitions
 - `[SaveLoad]` — persistence events
 - `[Input]` — input processing
+
+**Hand diagnostics** (spec 007). These lines describe the weapon state and both hands: item kind and ID, `iLeftHandType` / `iRightHandType`, `IsEquipping` / `IsUnequipping`, `bEquipOk`, `IsBlocking`, `IsAttacking`, and the caster's state and spell. The format is in `specs/007-fix-drawn-weapon-cast/contracts/diagnostic-log.md`, written by `DescribeHandsForLog` (`include/Shared/HandDiagnostics.h`).
+- `[State] Activation hands: ... slot=<n>`: at each new session.
+- `[SpellSystem] Press hands: hand=<L|R> ...`: at each plugin press of a hand, restarts included.
+- `[SpellSystem] Restore hands (before|after): ...`: around the restore. Queued equips may not show yet in `after`.
+- `[Action] synthetic attack dropped: hand=<L|R> value=<v> reason=<no handler|disabled|cannot process>`: a plugin press or release the game's attack/block handler did not take.
 
 ---
 

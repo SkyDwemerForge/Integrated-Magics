@@ -56,6 +56,8 @@ namespace IntegratedMagic {
         hm.pendingRestartNextFrame = false;
         hm.startRequestSecs = 0.f;
         hm.startFailSecs = 0.f;
+        hm.equipAnimGraceSecs = 0.f;
+        hm.equipAnimGraceActive = false;
         hm.castingElapsedSecs = 0.f;
         hm.chargeSkipped = false;
         hm.skipMagickaOwed = 0.f;
