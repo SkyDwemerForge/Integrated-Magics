@@ -8,7 +8,6 @@
 #include "Config/ConfigAdapter.h"
 #include "Input/ExclusiveTracker.h"
 #include "Input/HotkeyMatcher.h"
-#include "Input/HudToggle.h"
 #include "PCH.h"
 #include "SKSEMenuFramework.h"
 #include "Shared/InputIntents.h"
@@ -373,6 +372,13 @@ namespace Input::detail {
                ui->IsMenuOpen(ostim);
     }
 
+    bool IsMagicMenuOpen() {
+        auto* ui = RE::UI::GetSingleton();
+        if (!ui) return false;
+        static const RE::BSFixedString magicMenu{"MagicMenu"};
+        return ui->IsMenuOpen(magicMenu);
+    }
+
     ProcessButtonEventsResult ProcessButtonEvents(RE::InputEvent** a_evns, CaptureState& cap, bool& wantCapture,
                                                   KeyStateStore& keys) {
         ProcessButtonEventsResult result{};
@@ -499,8 +505,7 @@ namespace Input::detail {
 
                 if (!isWheel && code >= 0 && code < kMaxCode) {
                     remove = ShouldFilterAndSave(dev, code, rawCode, btn->QUserEvent(), btn->Value(),
-                                                 btn->HeldDuration(), keys, slots, cache, excl, replay, retained) ||
-                             ShouldFilterHudToggle(dev, code, cache);
+                                                 btn->HeldDuration(), keys, slots, cache, excl, replay, retained);
 #ifdef DEBUG
                     if (!remove && (dev == RE::INPUT_DEVICE::kMouse || dev == RE::INPUT_DEVICE::kKeyboard)) {
                         const int effCode = (dev == RE::INPUT_DEVICE::kMouse) ? kMouseButtonBase + code : code;

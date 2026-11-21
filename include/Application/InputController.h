@@ -6,6 +6,8 @@
 #include "Input/HandButtonStore.h"
 #include "Input/HotkeyCacheStore.h"
 #include "Input/KeyStateStore.h"
+#include "Input/MagicMenuHold.h"
+#include "Input/QuickBindResolver.h"
 #include "Input/ReplaySystem.h"
 #include "Input/SlotEdgeStore.h"
 #include "PCH.h"
@@ -39,6 +41,9 @@ namespace Application {
         [[nodiscard]] bool IsSlotHotkeyDown(int slot) const;
         [[nodiscard]] bool IsModifierHeld();
         [[nodiscard]] bool ConsumeHudToggle() const;
+        // Quick bind in the Magic Menu: the slots to assign this frame, longest hotkey first (spec 008, R13). Call it
+        // every frame, with `active` false outside the Magic Menu or with the wheel open.
+        [[nodiscard]] std::uint64_t ResolveQuickBindSlots(bool active, int slotCount);
 
         void RequestHotkeyCapture();
         void CancelHotkeyCapture();
@@ -65,6 +70,7 @@ namespace Application {
         InputController() = default;
 
         bool m_prevBlocked{false};
+        bool m_prevInMagicMenu{false};
         bool m_cacheInitialized{false};
         int m_modifierKbCode{-1};
         int m_modifierGpCode{-1};
@@ -78,6 +84,9 @@ namespace Application {
         std::optional<IntegratedMagic::StateExitResult> m_pendingForceExit{};
         Input::HandButtonStore m_handButtons{};
         Input::HandGateFlags m_handFlags{};
+        // Hotkey keys held back from the Magic Menu (spec 008).
+        Input::MagicMenuHoldStore m_menuHold{};
+        Input::QuickBindState m_quickBind{};
         float m_lastDt{0.f};
 
         static float CalculateDeltaTime();

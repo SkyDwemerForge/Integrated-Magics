@@ -49,6 +49,8 @@ namespace Application {
             Input::detail::LoadHotkeyCache_FromConfig(m_hotkeys, m_slots);
             Input::detail::LoadModifierBinding_FromConfig(m_modifierKbCode, m_modifierGpCode);
             Input::detail::ResetExclusiveState(m_slots, m_exclusive, m_replay, m_retained, m_deferred);
+            Input::detail::ClearMagicMenuHold(m_menuHold, "reset");
+            Input::detail::ResetQuickBind(m_quickBind);
         }
 
         for (int i = 0; i < m_slots.ActiveSlots(); ++i) {
@@ -69,6 +71,9 @@ namespace Application {
         const float dt = CalculateDeltaTime();
         m_lastDt = dt;
         const bool blocked = Input::detail::IsInputBlockedByMenus();
+        const bool inMagicMenu = Input::detail::IsMagicMenuOpen();
+        if (m_prevInMagicMenu && !inMagicMenu) Input::detail::ClearMagicMenuHold(m_menuHold, "Magic Menu closed");
+        m_prevInMagicMenu = inMagicMenu;
 
         if (m_prevBlocked && !blocked) {
             Input::detail::ClearLikelyStuckKeysAfterMenuClose(m_keys, m_slots, m_exclusive, m_hotkeys, m_replay,
@@ -105,6 +110,17 @@ namespace Application {
         }
         Input::detail::FilterMouseForPopup(a_evns);
 
+        // Magic Menu: hotkey keys are held back, consumed by a completed hotkey, or replayed to the menu (spec 008).
+        if (inMagicMenu && !wantCaptureBefore) {
+            Input::detail::FilterMagicMenuEvents(a_evns, m_keys, m_slots, m_hotkeys, m_menuHold);
+            Input::detail::TickMagicMenuHold(dt, m_keys, m_slots, m_hotkeys, m_menuHold);
+            if (const auto ev = Input::detail::PopMagicMenuOutbox(m_menuHold))
+                IntegratedMagic::detail::EnqueueRetainedEvent(ev->dev, ev->rawIdCode, ev->userEvent, ev->value,
+                                                              ev->heldSecs);
+        } else if (inMagicMenu) {
+            Input::detail::ClearMagicMenuHold(m_menuHold, "reset");
+        }
+
         if (!blocked)
             Input::detail::FilterEvents(a_evns, m_keys, m_slots, m_hotkeys, m_exclusive, m_replay, m_retained,
                                         m_handButtons, m_handFlags);
@@ -131,11 +147,15 @@ namespace Application {
         Input::detail::LoadHotkeyCache_FromConfig(m_hotkeys, m_slots);
         Input::detail::LoadModifierBinding_FromConfig(m_modifierKbCode, m_modifierGpCode);
         Input::detail::ResetExclusiveState(m_slots, m_exclusive, m_replay, m_retained, m_deferred);
+        Input::detail::ClearMagicMenuHold(m_menuHold, "reset");
+        Input::detail::ResetQuickBind(m_quickBind);
     }
 
     void InputController::ResetInputState() {
         MAGIC_DEBUG_LOG("[Input] ResetInputState: resetting exclusive state on game load");
         Input::detail::ResetExclusiveState(m_slots, m_exclusive, m_replay, m_retained, m_deferred);
+        Input::detail::ClearMagicMenuHold(m_menuHold, "reset");
+        Input::detail::ResetQuickBind(m_quickBind);
         m_handButtons = {};
     }
 
@@ -208,6 +228,10 @@ namespace Application {
 
     bool InputController::ConsumeHudToggle() const {
         return g_hudTogglePending.exchange(false, std::memory_order_relaxed);
+    }
+
+    std::uint64_t InputController::ResolveQuickBindSlots(bool active, int slotCount) {
+        return Input::detail::ResolveQuickBind(m_quickBind, active, m_lastDt, slotCount, m_hotkeys, m_keys, m_slots);
     }
 
     void InputController::RequestHotkeyCapture() { CaptureState::Get().Request(); }
