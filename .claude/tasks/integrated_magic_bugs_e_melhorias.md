@@ -88,7 +88,7 @@ a tecla `H` com o mod instalado.
 mods, configurações de hotkeys ou condições adicionais para reproduzir o
 problema.
 
-### BUG-07 --- Falha na conjuração após desembainhar armas
+### BUG-07 --- Falha na conjuração após desembainhar armas (DONE)
 
 **Descrição:** Na versão 1.5.1, foi identificado um problema de
 conjuração ao utilizar determinadas combinações de armas.
@@ -128,7 +128,7 @@ ativação (`Activation Lock`).
 O mecanismo precisa considerar o tipo de magia para evitar bloquear
 indevidamente a ativação de magias que exigem conjuração contínua.
 
-### FUNC-02 --- Quick Bound não deve ativar comandos no Magic Menu
+### FUNC-02 --- Quick Bound não deve ativar comandos no Magic Menu (DONE)
 
 **Descrição:** O comando `Quick Bound` não deve executar suas ações
 quando o jogador estiver utilizando o Magic Menu.
