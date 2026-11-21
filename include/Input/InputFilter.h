@@ -12,6 +12,8 @@
 namespace Input::detail {
 
     [[nodiscard]] bool IsInputBlockedByMenus();
+    // The Magic Menu is open: its hotkey keys go through the Magic Menu hold (spec 008).
+    [[nodiscard]] bool IsMagicMenuOpen();
     // Maps an input event to the code slot combos store: scancode (keyboard), kMouseButtonBase + id (mouse),
     // gamepad index 0..15, or -1 for an unknown gamepad button (spec 004, data-model "Effective code").
     [[nodiscard]] int EffectiveComboCode(RE::INPUT_DEVICE dev, std::uint32_t rawIdCode);

@@ -284,6 +284,25 @@ For `Automatic` (and `Hold` with `wantAutoAttack`), the plugin drives the cast v
 - **Require exclusive hotkey** is unchanged: a held block button still counts as an extra key.
 - **Logs**: `HandGate: <hand> press during plugin cast -> cancel session | ignored (Press mode)`, `other-hand press -> passes, cancel session`, `button taken at cast start -> released in game`, `button released -> gate cleared`, `[SpellSystem] HandGate cancel -> ForceExit`.
 
+**Magic Menu hold** (`include/Input/MagicMenuHold.h`, `src/Input/MagicMenuHold.cpp`; see `specs/008-fix-magic-menu-hotkey-leak/`). Quick bind (hover + slot hotkey) and the wheel hotkey work in the Magic Menu, but the menu must not run its own functions for those keys.
+- **Why a separate path**: the Magic Menu is in `IsInputBlockedByMenus`, which skips `FilterEvents` entirely. So `InputController::ProcessAndFilter` runs this hold while `IsMagicMenuOpen()` and no capture is pending, after `FilterMouseForPopup`. Slots still never activate in menus.
+- **Hold codes**: keys, mouse buttons and gamepad buttons in any active slot combo or in the wheel combo (`cache.hud`). Everything else, plus mouse movement, thumbsticks and the mouse wheel, passes untouched.
+- **Rules** (`FilterMagicMenuEvents`, then `TickMagicMenuHold` every frame):
+  - a fresh press is **consumed** if a combo containing it is fully held, otherwise **held** in a FIFO queue;
+  - each frame, every fully held slot or wheel combo consumes its codes' queued and outbox events, and their held repeats and releases are dropped;
+  - a queued press is handed over when `kMagicMenuHoldSec` (0.3 s, Magic Menu only) passes or its key is released. A queued release goes right after its press;
+  - handed events go to an outbox that sends **one event per frame** through `EnqueueRetainedEvent`, with no hand-button gate.
+- **Fates** (`MenuFate`, per code): `Held`, `Handing`, `Passed`, `Consumed`. A repeat or release follows its press and never arrives before it.
+- **Clears** (`ClearMagicMenuHold`): Magic Menu close, game load (`ResetInputState`), hotkey reload or config change, and a pending capture in the Magic Menu. Queued events are dropped, not sent.
+- **Logs**: `[Input] MenuHold: <label> held (queue=<n>)`, `consumed by slot=<n>|wheel`, `release consumed`, `handed to menu after <s>s (window|released)`, `<n> queued event(s) dropped (<reason>)`.
+- The old `ShouldFilterHudToggle` was removed: it lived in `FilterEvents`, which never runs in the Magic Menu.
+- **Which slot a quick bind assigns** (`include/Input/QuickBindResolver.h`, `ResolveQuickBind`, via `InputController::ResolveQuickBindSlots` from `HudController::OnFrame`):
+  - among hotkeys completed together, the **longest** wins, and the lower slot wins between identical ones (the spec 004 rule);
+  - a hotkey contained in a longer one waits up to `kMagicMenuHoldSec`, or its release, and is suppressed if the longer one completes meanwhile;
+  - hotkeys contained in no other one are assigned at once.
+  - **State**: `QuickBindState` (`wasDown`, `pending`, `pendingSecs`), reset on game load, hotkey reload and config change.
+  - **Logs**: `[Input] QuickBind: slot=<s> waiting for a longer combo (slot=<t>)`, `SUPPRESSED by slot=<t> (longer combo|identical combo)`, `assigned after <x>s (released|window)`.
+
 **`CaptureState`** — captures the next keypress for hotkey rebinding. Activated via `InputController::RequestHotkeyCapture()`, polled via `PollCapturedHotkey()`.
 
 ---
@@ -366,6 +385,7 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 | Skip equip animation | `include/Adapters/Outbound/MagicEquip.h` (`SetSkipEquipVars`, `ApplySkipEquipAnimReturn`) |
 | Hotkey not detected / double-firing | `include/Input/ExclusiveStore.h`, `src/Input/ExclusiveTracker.cpp`, `src/Input/InputFilter.cpp` (`ProcessButtonEvents`, `FilterEvents`), `src/Input/PhysicalReconciler.cpp` (stuck-key recovery). Check the log for `REFUSED (not exclusive) extra=` first. For shared buttons or a game action leaking during a combo, check the `HoldBack:` lines (`specs/004-fix-gamepad-slot-priority/`) |
 | Block / attack button breaking a cast (twitching, slot not ending, a hand stuck after blocking) | `include/Input/HandButtonStore.h`, `src/Input/InputFilter.cpp` (`GateHandEvent`), `src/Application/InputController.cpp` (`BuildHandGateFlags`, `TakeHeldHandButtons`), `src/Application/SpellSystemController.cpp` (`DispatchAttackPress`, `ConsumeInputExitRequests`), `src/Domain/MagicStatePump.cpp` (`OnCasterInterrupt`, `PumpAutomatic` retry bound). Check the `HandGate:` lines (`specs/005-fix-left-hand-block/`) |
+| Hotkey in the Magic Menu triggers a menu action (quick bind or wheel), or a quick bind fills the wrong slot | `src/Input/MagicMenuHold.cpp`, `src/Input/QuickBindResolver.cpp` (overlapping hotkeys, `QuickBind:` lines), `src/Application/InputController.cpp` (`ProcessAndFilter`, Magic Menu block). Check the `MenuHold:` lines first: `held` with no `consumed` = the hotkey never became fully held; no line = not a hold code, or the event never reached the filter (`specs/008-fix-magic-menu-hotkey-leak/`) |
 | Hotkey rebinding | `include/Input/CaptureState.h`, `Application::InputController::RequestHotkeyCapture()` |
 | HUD slot rendering | `include/UI/SlotDrawer.h`, `src/UI/SlotDrawer.cpp` |
 | Assignment popup | `include/UI/PopupDrawer.h`, `src/UI/PopupDrawer.cpp`, `IntegratedMagic::MagicAssign` |

@@ -168,16 +168,10 @@ namespace Application {
         }
         IntegratedMagic::HUD::FillHudViewFromConfig(v);
 
-        if (inMagicMenu && !nowPopupOpen) {
-            static std::uint64_t s_wasDown = 0;
-            std::uint64_t nowDown = 0;
-            for (int i = 0; i < n; ++i) {
-                if (input.IsSlotHotkeyDown(i)) nowDown |= (1uLL << static_cast<std::uint64_t>(i));
-            }
-            const std::uint64_t justPressed = nowDown & ~s_wasDown;
-            s_wasDown = nowDown;
-            IntegratedMagic::HUD::ExecuteHotkeyAssignment(justPressed, n);
-        }
+        // Quick bind: the longest hotkey wins when hotkeys overlap (spec 008, R13). Called every frame so the resolver
+        // tracks the held state while it is inactive too.
+        if (const std::uint64_t toAssign = input.ResolveQuickBindSlots(inMagicMenu && !nowPopupOpen, n))
+            IntegratedMagic::HUD::ExecuteHotkeyAssignment(toAssign, n);
 
         Input::detail::g_popupOpenForInput.store(nowPopupOpen, std::memory_order_relaxed);
     }

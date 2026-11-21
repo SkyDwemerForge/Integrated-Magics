@@ -264,6 +264,23 @@ gamepad (`LT`). `requireExclusiveHotkey` OFF, salvo indicação:
 - [x] **10.10** "- Vertex", "Apply changes", botão "M", grade de âncora do HUD e cantos do rótulo, 10× cada → o menu
   nunca desbota e cada controle mantém a aparência
 
+Magic Menu: atalhos de slot e da wheel sem acionar funções do menu (spec `specs/008-fix-magic-menu-hotkey-leak/`):
+
+- [x] **10.11** Spell em hover, hotkey de teclado de uma tecla e de duas teclas (as duas em até 0,3 s), 10× cada → a
+  spell vai para o slot e o menu não reage a nenhuma das teclas; log `MenuHold: ... consumed by slot=`
+- [x] **10.12** Gamepad, layout padrão (`RT` + botão), 10 atribuições, metade com `RT` primeiro e metade com o botão
+  primeiro → atribui e nenhum dos dois botões aciona função do menu; shout/power em hover vai para a voz do slot
+- [x] **10.13** Hotkey da wheel no Magic Menu, teclado e gamepad, abrir e fechar 10× cada → a wheel alterna e o menu
+  não reage; log `consumed by wheel`
+- [ ] **10.14** Botão de hotkey sozinho no Magic Menu (ex.: `RT` sozinho, `Shift` sozinho): toque rápido 10× → o menu
+  executa a ação normal uma vez, na soltura; segurado ~1 s → reage em até 0,3 s e continua enquanto segurado
+- [ ] **10.15** Botões fora de qualquer hotkey no Magic Menu (navegação, categorias) → sem atraso
+- [ ] **10.16** Fechar o Magic Menu com uma tecla de hotkey segurada, e fechar até 0,3 s depois de apertar uma, 5× cada
+  → de volta ao jogo, movimento, ataque e slots funcionam no primeiro aperto
+- [x] **10.17** Hotkeys sobrepostas (ex.: `RT + LT + A` e `RT + A`): atribuir com a mais longa 10×, em ordens
+  diferentes → só o slot dela recebe a spell (log `QuickBind: ... SUPPRESSED by slot=`); atribuir com a mais curta
+  10× → só o slot dela recebe, em até 0,3 s ou na soltura
+
 ---
 
 ## 11. Persistência

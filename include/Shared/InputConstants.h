@@ -31,6 +31,9 @@ inline constexpr float kMaxContestedHoldSec = 0.5f;
 // Combos have at most 3 buttons, so this is two gaps of kComboToleranceSec.
 inline constexpr float kMaxChordHoldSec = 2.f * kComboToleranceSec;
 inline constexpr float kPressBothAtSameTimeWindowSec = 0.2f;
+// Window of a held-back press in the Magic Menu only: a slot or wheel hotkey key waits this long, or until released,
+// before it reaches the menu (spec 008, R3).
+inline constexpr float kMagicMenuHoldSec = 0.3f;
 
 inline constexpr int kDIK_W = 0x11;
 inline constexpr int kDIK_A = 0x1E;
