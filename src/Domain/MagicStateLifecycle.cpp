@@ -7,6 +7,7 @@
 #include "Domain/State.h"
 #include "PCH.h"
 #include "Shared/Hand.h"
+#include "Shared/HandDiagnostics.h"
 #include "Shared/InventoryUtil.h"
 
 namespace IntegratedMagic {
@@ -61,6 +62,8 @@ namespace IntegratedMagic {
         MAGIC_DEBUG_LOG("[State] EnsureActiveWithSnapshot: snapHasSpells={} (right={:#010x} left={:#010x})",
                         snapHasSpells, _restore.snapshot.rightSpell ? _restore.snapshot.rightSpell->GetFormID() : 0u,
                         _restore.snapshot.leftSpell ? _restore.snapshot.leftSpell->GetFormID() : 0u);
+
+        MAGIC_DEBUG_LOG("[State] Activation hands: {} slot={}", DescribeHandsForLog(pc), slot);
 
         if (_session.wasHandsDown && raiseHandsIfSheathed) {
             MAGIC_DEBUG_LOG(

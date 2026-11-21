@@ -33,11 +33,24 @@ namespace IntegratedMagic::detail {
     }
 
     static void FireAttackDirect(Hand hand, float value, float heldSecs) {
-        auto* pc = RE::PlayerControls::GetSingleton();
-        if (!pc || !pc->attackBlockHandler) return;
-        if (!pc->attackBlockHandler->IsInputEventHandlingEnabled()) return;
-
         const bool left = (hand == Hand::Left);
+        // A dropped press or release is logged, a held repeat is not (spec 007, contracts/diagnostic-log.md §3).
+        [[maybe_unused]] const bool logDrop = (value == 0.0f) || (heldSecs <= 0.0f);
+
+        auto* pc = RE::PlayerControls::GetSingleton();
+        if (!pc || !pc->attackBlockHandler) {
+            if (logDrop)
+                MAGIC_DEBUG_LOG("[Action] synthetic attack dropped: hand={} value={:.1f} reason=no handler",
+                                left ? "L" : "R", value);
+            return;
+        }
+        if (!pc->attackBlockHandler->IsInputEventHandlingEnabled()) {
+            if (logDrop)
+                MAGIC_DEBUG_LOG("[Action] synthetic attack dropped: hand={} value={:.1f} reason=disabled",
+                                left ? "L" : "R", value);
+            return;
+        }
+
         const auto& ue = left ? LeftAttackEvent() : RightAttackEvent();
         const auto id = left ? kLeftAttackMouseId : kRightAttackMouseId;
 
@@ -45,7 +58,13 @@ namespace IntegratedMagic::detail {
         if (!ev) return;
         ev->next = nullptr;
 
-        if (pc->attackBlockHandler->CanProcess(ev)) pc->attackBlockHandler->ProcessButton(ev, &pc->data);
+        if (!pc->attackBlockHandler->CanProcess(ev)) {
+            if (logDrop)
+                MAGIC_DEBUG_LOG("[Action] synthetic attack dropped: hand={} value={:.1f} reason=cannot process",
+                                left ? "L" : "R", value);
+            return;
+        }
+        pc->attackBlockHandler->ProcessButton(ev, &pc->data);
     }
 
     static void FireShoutDirect(float value, float heldSecs) {
