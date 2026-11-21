@@ -33,7 +33,7 @@ Hook installation: `include/Hooks.h` / `src/Hooks.cpp` (see [Hooks](#hooks)).
 
 ## Hooks
 
-All hooks are installed once by `IntegratedMagic::Hooks::Install_Hooks()` during `SKSEPluginLoad`. The exception is `WndProcHook`, which `D3DInitHook` installs once the game window exists. Each `Install()` logs `[Hooks] <Name> installed` at `info` level, so the lines appear in release builds too.
+All hooks are installed once by `IntegratedMagic::Hooks::Install_Hooks()` during `SKSEPluginLoad`. The exceptions are `WndProcHook`, which `D3DInitHook` installs once the game window exists, and `MenuInputShieldHook`, which `DXGIPresentHook` installs on the first hotkey capture. Each `Install()` logs `[Hooks] <Name> installed` at `info` level, so the lines appear in release builds too.
 
 | Hook | Kind | Trampoline bytes | Target |
 |---|---|---|---|
@@ -44,6 +44,7 @@ All hooks are installed once by `IntegratedMagic::Hooks::Install_Hooks()` during
 | `MagicCasterInterruptHook` | vtable | 0 | `VTABLE_ActorMagicCaster[0]`, slot 8 |
 | `MagicCasterStartCastHook` | vtable | 0 | `VTABLE_ActorMagicCaster[0]`, slot 6 |
 | `WndProcHook` | window procedure | 0 | `SetWindowLongPtr` on the game window |
+| `MenuInputShieldHook` | call (5-byte) | 14 | Same site as `PollInputDevicesHook`. Installed on the first hotkey capture, after the hooks other plugins install there at load (SKSE Menu Framework, Input Manager), so it is the outermost thunk (spec 009) |
 
 ### Hook space (trampoline) policy
 
@@ -366,6 +367,28 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 - A conditional `PushStyleColor` / `PopStyleColor` (or `PushStyleVar` / `PopStyleVar`) pair tests one `const` local computed before its control.
 - `PushID` / `PopID` are unconditional, with no early `return` between them.
 
+**Hotkey capture input guard** (`include/UI/CaptureInputGuard.h`, `src/UI/CaptureInputGuard.cpp`; see `specs/009-fix-capture-input-leak/`).
+- **Why**: SKSE Menu Framework hooks the **same input call site** as `PollInputDevicesHook`, as the outer hook. While its window is open, it feeds every event to its ImGui context and passes an empty list on. So the plugin's own event filtering never reaches the menu, and the capture reads XInput (`PollCapturedInput` in `DXGIPresentHook`) and window messages (`WndProcHook`).
+- **The guard**:
+  - **What it does**:
+    - **The outer hook**: `MenuInputShieldHook` hands the framework an empty event list while `ShouldHideMenuInput()` holds (guard on or capture waiting, with the page drawn in the last 0.25 s). That is what stops the menu: the framework acts on raw events in its own thunk, before ImGui and before its `AddInputEvent` callbacks, so key ownership and the input callback alone did not stop it in game.
+    - **Key ownership**: it also claims every named ImGui key once per frame with `igSetKeyOwner` (owner `0x494D4347`, `ImGuiInputFlags_LockUntilRelease`), for input ImGui reads by itself.
+    - **The hotkey**: it calls `SKSEMenuFramework::SetHotkeyEnabled(false)`.
+  - **When**: while a capture waits, and until every gamepad button, mouse button and key is released, for at most `kCaptureGuardReleaseCapSec` (3 s).
+  - **Restore**: only the hotkey state needs it. Once no longer claimed, unheld keys lose the owner by themselves, and held keys at their release.
+  - **Updated**: once per frame from `PollCapturedInput` through `HudController::UpdateCaptureGuard`.
+  - **Do not use `ImGuiConfigFlags`**: the framework rewrites its navigation flags every frame, so clearing `NavEnableGamepad` does nothing (the first design, which failed in game).
+- **Edge-triggered captures**:
+  - the first waiting frame records what is already held and captures nothing, so `A` on "Cap" is not captured;
+  - `WndProcHook` ignores auto-repeat `WM_KEYDOWN` (`lParam` bit 30);
+  - XInput is read only while a capture waits or the guard is on, because it is slow with no controller connected.
+- **Outcomes**:
+  - the other device cancels the capture (`DrawKeyValueCapture`), and so does `Escape`, which is never a value;
+  - a capture whose page (`DrawSettings` → `NoteCapturePageDrawn`) was not drawn for `kCapturePageTimeoutSec` (0.25 s) is cancelled;
+  - `DrawKeyValueCapture` clears a stale `g_fieldCapture`.
+- **Held state**: undefined virtual keys and the gamepad VK range are skipped (`IsIgnoredVirtualKey`), because VK `0x07` was reported as held all the time.
+- **Logs**: `[Hooks] MenuInputShieldHook installed (outer, previous target in <module>)`, where `<module>` is the hook that was outermost before (`InputManager.dll` in the validation run, with the framework's hook further in); `[UI] CaptureGuard: on (menu input hidden, keys claimed, hotkey off)`, `<n> ImGui keys claimed`, `waiting for release of <gp:n|vk:0x..>`, `off after <s>s (released|cap), input frames hidden from the menu=<n>`; `[UI] Capture: <kb|gp> input during a <gp|kb> capture -> cancelled`, `Escape -> cancelled`, `page not shown -> cancelled`, `stale field capture cleared`.
+
 ---
 
 ## Common tasks → files
@@ -387,6 +410,7 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 | Block / attack button breaking a cast (twitching, slot not ending, a hand stuck after blocking) | `include/Input/HandButtonStore.h`, `src/Input/InputFilter.cpp` (`GateHandEvent`), `src/Application/InputController.cpp` (`BuildHandGateFlags`, `TakeHeldHandButtons`), `src/Application/SpellSystemController.cpp` (`DispatchAttackPress`, `ConsumeInputExitRequests`), `src/Domain/MagicStatePump.cpp` (`OnCasterInterrupt`, `PumpAutomatic` retry bound). Check the `HandGate:` lines (`specs/005-fix-left-hand-block/`) |
 | Hotkey in the Magic Menu triggers a menu action (quick bind or wheel), or a quick bind fills the wrong slot | `src/Input/MagicMenuHold.cpp`, `src/Input/QuickBindResolver.cpp` (overlapping hotkeys, `QuickBind:` lines), `src/Application/InputController.cpp` (`ProcessAndFilter`, Magic Menu block). Check the `MenuHold:` lines first: `held` with no `consumed` = the hotkey never became fully held; no line = not a hold code, or the event never reached the filter (`specs/008-fix-magic-menu-hotkey-leak/`) |
 | Hotkey rebinding | `include/Input/CaptureState.h`, `Application::InputController::RequestHotkeyCapture()` |
+| The SKSE menu reacts during a hotkey capture, or a capture takes the wrong input | `src/UI/CaptureInputGuard.cpp`, `src/Adapters/Inbound/DXGIPresentHook.cpp` (`PollCapturedInput`), `src/Adapters/Inbound/WndProcHook.cpp`, `src/UI/MENU.cpp` (`DrawKeyValueCapture`). Check the `CaptureGuard:` / `Capture:` lines first (`specs/009-fix-capture-input-leak/`) |
 | HUD slot rendering | `include/UI/SlotDrawer.h`, `src/UI/SlotDrawer.cpp` |
 | Assignment popup | `include/UI/PopupDrawer.h`, `src/UI/PopupDrawer.cpp`, `IntegratedMagic::MagicAssign` |
 | Cooldown display | `include/Domain/SlotCooldownTracker.h` |
