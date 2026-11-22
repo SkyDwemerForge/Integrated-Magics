@@ -200,6 +200,7 @@ namespace IntegratedMagic {
 
         spellNamePosition = GetButtonLabelCorner(ini, "HUD", "SpellNamePosition", spellNamePosition);
         spellNamePadding = GetFloat(ini, "HUD", "SpellNamePadding", spellNamePadding);
+        spellNameScale = NormalizeSpellNameScale(GetFloat(ini, "HUD", "SpellNameScale", spellNameScale));
 
         buttonIconType = GetButtonIconType(ini, "General", "ButtonIconType", buttonIconType);
 
@@ -398,6 +399,7 @@ namespace IntegratedMagic {
         setBool("HUD", "ShowSpellNames", showSpellNamesInHud);
         ini.SetValue("HUD", "SpellNamePosition", kButtonLabelCornerNames[static_cast<int>(spellNamePosition)]);
         setFloat("HUD", "SpellNamePadding", spellNamePadding);
+        setFloat("HUD", "SpellNameScale", spellNameScale);
 
         ini.SetValue("General", "ButtonIconType", kButtonIconTypeNames[static_cast<int>(buttonIconType)]);
 

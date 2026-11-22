@@ -362,6 +362,16 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 
 **`SlotCooldownTracker`** (`include/Domain/SlotCooldownTracker.h`) — tracks per-slot cooldown progress for the HUD ring display.
 
+**Spell name size** (`src/UI/FontLoader.cpp`, `include/UI/HudTextUtil.h`; see `specs/011-spell-name-font-size/`).
+- **The setting**: `StyleConfig::spellNameScale`, `styles.ini` `[HUD]` `SpellNameScale`, 0.5–2.0 in steps of 0.05. Load and the menu ("Size (%)" under "Padding") both go through `NormalizeSpellNameScale`. 1.0 is today's look.
+- **The name font**: ImGui 1.89.1 rasterizes a font at one size, so scaling text blurs it. The atlas holds the base font (`[Font]` `Size`, always added first, so it stays the default for every other text) and, only when the scale is not 1.0 and names are on, a name font at base × scale with the same character sets.
+- **The rebuild**: `FontLoader::RebuildIfNeeded`, through `HudController::PrepareFonts`, runs in the Present thunk after `SetCurrentContext` and before `ImGui_ImplDX11_NewFrame`. It rebuilds once the wanted size has been stable for 0.25 s, then `ImGui_ImplDX11_InvalidateDeviceObjects` makes the next `NewFrame` upload the atlas. The atlas must never change between `NewFrame` and `Render`.
+  - **No file I/O after init**: the font file is read once by `LoadFontsFromConfig`, and every build adds fonts from that buffer (`FontDataOwnedByAtlas = false`).
+  - **The size guard**: an atlas side above 16384, or a failed `Build()`, rebuilds the base font alone and warns. The same size is not retried until it changes.
+- **Drawing**: every measurement or draw of a spell name runs inside `ImGui::PushFont(FontLoader::SpellNameFont())` / `PopFont()` (`nullptr` = the default font): `DrawSpellLabel`, the HUD reserve in `SlotDrawer`, the popup reserve in `PopupDrawer`. Nothing else uses the name font.
+- **No window clip**: `DrawSpellLabel` draws inside `PushClipRectFullScreen`, because the reserve is 2 lines (1.6 in the popup) and a wrapped name can need more.
+- **Logs**: `[HUD] FontLoader: atlas built (base=<px> px, names=<px> px|none, scale=<s>) <w>x<h> in <ms> ms` (debug), and the warnings `spell name font too large (<w>x<h>)` / `atlas build failed (names=<px> px)`, `names use the base font`.
+
 **SKSE menu pair rule** (`src/UI/MENU.cpp`, spec 006). The settings page draws into SKSE Menu Framework's **shared** ImGui context (`ImGuiMCP::`), so an unbalanced pair breaks the whole SKSE menu, other mods' pages included.
 - `BeginDisabled(cond)` / `EndDisabled()` are always an **unconditional** pair. Never guard them with two `if`s on a state the control in between can change: that is how the capture button made the menu fade with every capture (`specs/006-fix-menu-capture-transparency/`).
 - A conditional `PushStyleColor` / `PopStyleColor` (or `PushStyleVar` / `PopStyleVar`) pair tests one `const` local computed before its control.
@@ -412,6 +422,7 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 | Hotkey rebinding | `include/Input/CaptureState.h`, `Application::InputController::RequestHotkeyCapture()` |
 | The SKSE menu reacts during a hotkey capture, or a capture takes the wrong input | `src/UI/CaptureInputGuard.cpp`, `src/Adapters/Inbound/DXGIPresentHook.cpp` (`PollCapturedInput`), `src/Adapters/Inbound/WndProcHook.cpp`, `src/UI/MENU.cpp` (`DrawKeyValueCapture`). Check the `CaptureGuard:` / `Capture:` lines first (`specs/009-fix-capture-input-leak/`) |
 | HUD slot rendering | `include/UI/SlotDrawer.h`, `src/UI/SlotDrawer.cpp` |
+| Spell name size, blurry or cut-off spell names | `src/UI/FontLoader.cpp` (`RebuildIfNeeded`, `BuildAtlas`), `include/UI/HudTextUtil.h` (`DrawSpellLabel`), `src/UI/Slotdrawer.cpp` and `src/UI/Popupdrawer.cpp` (name reserve), `src/UI/MENU.cpp` ("Size (%)"). Check the `FontLoader: atlas built` lines first (`specs/011-spell-name-font-size/`) |
 | Assignment popup | `include/UI/PopupDrawer.h`, `src/UI/PopupDrawer.cpp`, `IntegratedMagic::MagicAssign` |
 | Cooldown display | `include/Domain/SlotCooldownTracker.h` |
 | Adding a new config option | `include/Config/Config.h` + relevant `Ports/` file + `src/Config/ConfigAdapter.cpp` |

@@ -9,6 +9,7 @@
 #include "Config/StyleConfig.h"
 #include "PCH.h"
 #include "Shared/Hand.h"
+#include "UI/FontLoader.h"
 #include "UI/HudState.h"
 #include "UI/HudTextUtil.h"
 #include "UI/HudView.h"
@@ -991,6 +992,8 @@ namespace IntegratedMagic::HUD::SlotDrawer {
 
         float textPadTop = 0.f, textPadBottom = 0.f, textPadLeft = 0.f, textPadRight = 0.f;
         if (st.showSpellNamesInHud) {
+            // The reserve is measured with the spell name font (spec 011). Unconditional pair, closed after the switch.
+            ImGui::PushFont(FontLoader::SpellNameFont());
             const float textHeightReserve = ImGui::GetTextLineHeight() * 2.f + 8.f + st.spellNamePadding;
 
             const auto CalcMaxLabelWidth = [&]() -> float {
@@ -1035,6 +1038,7 @@ namespace IntegratedMagic::HUD::SlotDrawer {
                     textPadTop = textPadBottom = textPadLeft = textPadRight = textHeightReserve;
                     break;
             }
+            ImGui::PopFont();
         }
 
         const LayoutVec2 stableHalf = {baseHalf.x + scalePad + std::max(textPadLeft, textPadRight),

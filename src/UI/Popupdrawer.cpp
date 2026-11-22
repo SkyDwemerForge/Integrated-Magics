@@ -13,6 +13,7 @@
 #include "PCH.h"
 #include "Shared/Hand.h"
 #include "Shared/HudIntents.h"
+#include "UI/FontLoader.h"
 #include "UI/HudState.h"
 #include "UI/HudTextUtil.h"
 #include "UI/PolyFill.h"
@@ -327,8 +328,11 @@ namespace IntegratedMagic::HUD::PopupDrawer {
 
         const LayoutVec2 bh =
             SlotLayout::BoundingHalf(st.popupLayout, n, st.popupSlotRadius, dynPopupR, st.popupSlotGap, st.gridColumns);
+        // The name reserve is measured with the spell name font (spec 011). Unconditional pair.
+        ImGui::PushFont(FontLoader::SpellNameFont());
         const float textReserve =
             st.showSpellNamesInHud ? (ImGui::GetTextLineHeight() * 1.6f + st.spellNamePadding) : 0.f;
+        ImGui::PopFont();
 
         const float popupHalfX = bh.x + kGlowPad + st.modeWidgetW + 12.f + textReserve;
         const float popupHalfY = bh.y + kGlowPad + st.modeWidgetW + 12.f + textReserve;

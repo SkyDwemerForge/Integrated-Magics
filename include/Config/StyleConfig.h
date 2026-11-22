@@ -1,4 +1,6 @@
 #pragma once
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -86,6 +88,18 @@ namespace IntegratedMagic {
         void SetStar(int points = 5, float innerFactor = 0.45f);
     };
 
+    // Spell name size, relative to the base font ([Font] Size). 1.0 = the base font itself (spec 011).
+    inline constexpr float kSpellNameScaleMin = 0.5f;
+    inline constexpr float kSpellNameScaleMax = 2.0f;
+    inline constexpr float kSpellNameScaleStep = 0.05f;
+
+    // Rounds to the nearest step and clamps to [kSpellNameScaleMin, kSpellNameScaleMax]. Used by Load and the menu.
+    inline float NormalizeSpellNameScale(float s) {
+        if (std::isnan(s)) return 1.f;
+        const float rounded = std::round(s / kSpellNameScaleStep) * kSpellNameScaleStep;
+        return std::clamp(rounded, kSpellNameScaleMin, kSpellNameScaleMax);
+    }
+
     struct StyleConfig {
         FontConfig font;
         SlotShapeConfig slotShape;
@@ -120,6 +134,7 @@ namespace IntegratedMagic {
         bool showSpellNamesInHud = false;
         ButtonLabelCorner spellNamePosition = ButtonLabelCorner::Bottom;
         float spellNamePadding = 4.f;
+        float spellNameScale = 1.f;  // [HUD] SpellNameScale, always normalized (NormalizeSpellNameScale)
 
         ButtonIconType buttonIconType = ButtonIconType::Xbox;
 
