@@ -299,6 +299,23 @@ Captura de hotkey no SKSE menu sem o menu reagir ao input capturado (spec `specs
 - [ ] **10.22** Depois de cada captura, ao soltar tudo, o menu reage normalmente no primeiro aperto; fechar o SKSE menu
   durante uma captura e reabrir → nada capturado e navegação normal
 
+Tamanho do nome das magias (spec `specs/011-spell-name-font-size/`):
+
+- [ ] **10.23** "Show spell names" ligado, `SpellNameScale` ausente ou 1.0 → os nomes de 1 ou 2 linhas ficam iguais a um
+  print da versão anterior; log `FontLoader: atlas built (base=28 px, names=none, scale=1)`
+- [ ] **10.24** "Size (%)" (abaixo de "Padding"): cliques seguidos até 150, valores digitados (`73` → 75, `10` → 50,
+  `500` → 200), 10 mudanças entre 50 e 200 → cada uma aparece no HUD em menos de 1 s, sem reiniciar, uma linha `atlas
+  built` por mudança assentada e o FPS igual ao de antes; "Apply changes" e 3 reinícios → o tamanho continua, e o
+  `styles.ini` tem `SpellNameScale`
+- [ ] **10.25** 200% → letras tão nítidas quanto em 100% (prints lado a lado); nas 6 posições, todas as linhas de todos
+  os nomes aparecem inteiras (nome de 2 magias incluído), do lado escolhido, sem cobrir o círculo nem os ícones de
+  hotkey; 50% → legível, com a mesma distância do círculo
+- [ ] **10.26** 200% no popup de atribuição (Magic Menu) → nomes em 200% e inteiros; tooltips e rótulos de modo no
+  tamanho de sempre; atribuir com clique funciona
+- [ ] **10.27** 150% com "Show spell names" desligado e religado → os nomes somem e voltam em 150% (log `names=none` /
+  `names=42 px`); `SpellNameScale = 9` no `styles.ini` → nomes em 200% e o controle mostra 200; slot ativado durante
+  uma mudança de tamanho → cast normal
+
 ---
 
 ## 11. Persistência

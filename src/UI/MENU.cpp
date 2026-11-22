@@ -1,6 +1,7 @@
 #include "UI/Menu.h"
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <format>
 #include <string>
@@ -771,6 +772,15 @@ namespace {
                 if (ImGuiMCP::InputFloat(S::Get("HUD_SpellNamePadding", "Padding##spellnamepadding").c_str(), &snp, 1.f,
                                          5.f, "%.1f")) {
                     st.spellNamePadding = std::max(0.f, snp);
+                    dirty = true;
+                }
+
+                // Spell name size in percent of the base font; the HUD rebuilds its font once the value settles
+                // (spec 011).
+                ImGuiMCP::SetNextItemWidth(150.f);
+                int pct = static_cast<int>(std::lround(st.spellNameScale * 100.f));
+                if (ImGuiMCP::InputInt(S::Get("HUD_SpellNameSize", "Size (%)##spellnamesize").c_str(), &pct, 5, 25)) {
+                    st.spellNameScale = IntegratedMagic::NormalizeSpellNameScale(static_cast<float>(pct) / 100.f);
                     dirty = true;
                 }
             }

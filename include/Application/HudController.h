@@ -8,6 +8,8 @@ namespace Application {
 
         void OnFrame();
         void InitializeGraphics();
+        // Rebuilds the HUD font atlas if the spell name size changed (spec 011). Before ImGui_ImplDX11_NewFrame.
+        void PrepareFonts();
         void RenderFrame(float backbufferW, float backbufferH);
         void OnWindowMessage(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
         // Hotkey capture input guard of the SKSE menu (spec 009), once per frame from the Present hook.

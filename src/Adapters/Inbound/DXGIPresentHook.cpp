@@ -164,6 +164,8 @@ namespace IntegratedMagic::Inbound::DXGIPresentHook {
                 if (!HookContext::g_renderInitialized.load()) return;
 
                 ImGui::SetCurrentContext(HookContext::g_imguiContext);
+                // The font atlas may change only here, before NewFrame: the spell name size (spec 011).
+                Application::HudController::Get().PrepareFonts();
                 ImGui_ImplDX11_NewFrame();
                 ImGui_ImplWin32_NewFrame();
 

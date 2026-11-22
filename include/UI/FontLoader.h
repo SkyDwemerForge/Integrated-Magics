@@ -3,7 +3,18 @@
 
 namespace FontLoader {
 
+    // Reads the font file once and builds the atlas: the base font, plus the spell name font when the spell name size
+    // is not 100% and names are on (spec 011). Called once, after ImGui_ImplDX11_Init.
     void LoadFontsFromConfig();
+
+    // Rebuilds the atlas when the wanted spell name size changed and settled. Called once per frame from the Present
+    // thunk, after ImGui::SetCurrentContext and before ImGui_ImplDX11_NewFrame. The atlas must never change between
+    // NewFrame and Render.
+    void RebuildIfNeeded();
+
+    // The spell name font, or nullptr when names use the base font. ImGui::PushFont(nullptr) pushes the default font,
+    // so callers always push it and always pop.
+    ImFont* SpellNameFont();
 
     inline const ImWchar* GetGlyphRangesDefault() { return ImGui::GetIO().Fonts->GetGlyphRangesDefault(); }
 

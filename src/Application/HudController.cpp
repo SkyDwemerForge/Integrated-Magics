@@ -182,6 +182,8 @@ namespace Application {
         FontLoader::LoadFontsFromConfig();
     }
 
+    void HudController::PrepareFonts() { FontLoader::RebuildIfNeeded(); }
+
     void HudController::RenderFrame(float backbufferW, float backbufferH) {
         IntegratedMagic::HUD::g_backbufferW.store(backbufferW, std::memory_order_relaxed);
         IntegratedMagic::HUD::g_backbufferH.store(backbufferH, std::memory_order_relaxed);
