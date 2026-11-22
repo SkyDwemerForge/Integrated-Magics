@@ -20,11 +20,18 @@ namespace IntegratedMagic::Hooks {
             trampoline.create(kHookSpaceBytes);
         }
 
+        // Breadcrumbs (debug build): the last one in the log names the hook a start-up fault happened in (spec 010).
+        MAGIC_DEBUG_LOG("[Hooks] installing PollInputDevicesHook");
         Inbound::PollInputDevicesHook::Install();
+        MAGIC_DEBUG_LOG("[Hooks] installing PlayerAnimGraphHook");
         Inbound::PlayerAnimGraphHook::Install();
+        MAGIC_DEBUG_LOG("[Hooks] installing D3DInitHook");
         Inbound::D3DInitHook::Install();
+        MAGIC_DEBUG_LOG("[Hooks] installing DXGIPresentHook");
         Inbound::DXGIPresentHook::Install();
+        MAGIC_DEBUG_LOG("[Hooks] installing MagicCasterInterruptHook");
         Inbound::MagicCasterInterruptHook::Install();
+        MAGIC_DEBUG_LOG("[Hooks] installing MagicCasterStartCastHook");
         Inbound::MagicCasterStartCastHook::Install();
 
         const auto used = trampoline.allocated_size();

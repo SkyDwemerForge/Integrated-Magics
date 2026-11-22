@@ -106,7 +106,7 @@ namespace Input::detail {
 
         // When a slot activates, every held-back or queued event whose button belongs to its combo is dropped: the
         // game never sees it, and its fate becomes Consumed (spec 004, research R3a and R11).
-        void ConsumeHeldBackForCombo(int winner, const SlotHotkeys& hk, int n, ExclusiveStore& excl,
+        void ConsumeHeldBackForCombo([[maybe_unused]] int winner, const SlotHotkeys& hk, int n, ExclusiveStore& excl,
                                      RetainedArr& retained, DeferredVec& deferred) {
             auto consumeIfOwned = [&](const RetainedEvent& ev) {
                 const bool gp = IsGamepadEvent(ev);
@@ -437,7 +437,7 @@ namespace Input::detail {
 
     void ClearExclusivePending(std::size_t s, ClearReason reason, ExclusiveStore& excl, ReplayArr& replay,
                                RetainedArr& retained, DeferredVec& deferred) {
-#ifdef DEBUG
+#ifdef MAGIC_DEBUG_LOGGING
         const char* reasonStr = (reason == ClearReason::Success)   ? "Success"
                                 : (reason == ClearReason::Timeout) ? "Timeout"
                                                                    : "Cancelled";

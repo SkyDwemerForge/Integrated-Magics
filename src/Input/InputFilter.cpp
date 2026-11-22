@@ -506,7 +506,7 @@ namespace Input::detail {
                 if (!isWheel && code >= 0 && code < kMaxCode) {
                     remove = ShouldFilterAndSave(dev, code, rawCode, btn->QUserEvent(), btn->Value(),
                                                  btn->HeldDuration(), keys, slots, cache, excl, replay, retained);
-#ifdef DEBUG
+#ifdef MAGIC_DEBUG_LOGGING
                     if (!remove && (dev == RE::INPUT_DEVICE::kMouse || dev == RE::INPUT_DEVICE::kKeyboard)) {
                         const int effCode = (dev == RE::INPUT_DEVICE::kMouse) ? kMouseButtonBase + code : code;
                         const int n = slots.ActiveSlots();

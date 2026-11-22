@@ -11,6 +11,17 @@
 #include "UI/Strings.h"
 #include "UI/TextureManager.h"
 
+#ifdef MAGIC_DEBUG_LOGGING
+    // Windows.h must come before DbgHelp.h, so include sorting stays off for these two.
+    // clang-format off
+    #include <Windows.h>
+    #include <DbgHelp.h>
+// clang-format on
+
+    #include <cstring>
+    #include <string>
+#endif
+
 namespace {
     static std::string g_pendingEssPath;
     static std::string g_currentEssPath;
@@ -177,15 +188,172 @@ namespace {
                 break;
         }
     }
+
+    // The plugin load. The [Startup] breadcrumbs (debug build) name the step a start-up fault happened in: the logger
+    // flushes every line, so the last one in the log is the step that was running (spec 010).
+    bool LoadPlugin(const SKSE::LoadInterface* skse) {
+        SKSE::Init(skse, {.trampoline = true, .trampolineSize = IntegratedMagic::Hooks::kHookSpaceBytes});
+        InitializeLogger();
+        MAGIC_DEBUG_LOG("[Startup] StyleConfig::Load");
+        IntegratedMagic::StyleConfig::Get().Load();
+        MAGIC_DEBUG_LOG("[Startup] RegisterListener");
+        if (const auto mi = SKSE::GetMessagingInterface()) {
+            mi->RegisterListener(GlobalMessageHandler);
+        }
+        // The game module base is never 0 here, unless a static object reached the game at DLL load (research R7).
+        MAGIC_DEBUG_LOG("[Startup] Install_Hooks (game module base=0x{:X})", REL::Module::get().base());
+        IntegratedMagic::Hooks::Install_Hooks();
+        MAGIC_DEBUG_LOG("[Startup] SKSEPluginLoad done");
+        return true;
+    }
+
+#ifdef MAGIC_DEBUG_LOGGING
+    // Start-up fault report (debug build only; spec 010, contracts/load-fault-report.md). SKSE catches a fault that
+    // escapes SKSEPlugin_Load and logs only "fatal error occurred while loading plugin". This filter logs the exception
+    // code, the faulting module + RVA and a symbolized stack first, then lets SKSE handle the fault exactly as before.
+    constexpr DWORD kCppExceptionCode = 0xE06D7363;
+    constexpr int kMaxFaultFrames = 24;
+    bool g_loadFaultReported = false;
+
+    const char* FaultName(DWORD code) {
+        switch (code) {
+            case EXCEPTION_ACCESS_VIOLATION:
+                return "access violation";
+            case EXCEPTION_BREAKPOINT:
+                return "breakpoint";
+            case EXCEPTION_STACK_OVERFLOW:
+                return "stack overflow";
+            case kCppExceptionCode:
+                return "C++ exception";
+            case EXCEPTION_ILLEGAL_INSTRUCTION:
+                return "illegal instruction";
+            default:
+                return "other";
+        }
+    }
+
+    // File name part of a path. Plain char handling: nothing here may throw inside the exception filter.
+    const char* BaseName(const char* path) {
+        const char* slash = std::strrchr(path, '\\');
+        const char* fwd = std::strrchr(path, '/');
+        if (fwd && (!slash || fwd > slash)) slash = fwd;
+        return slash ? slash + 1 : path;
+    }
+
+    // "<module>+0x<rva>", or the raw address when no module contains it.
+    std::string DescribeModule(DWORD64 addr) {
+        HMODULE mod = nullptr;
+        constexpr DWORD kFlags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+        if (!GetModuleHandleExW(kFlags, reinterpret_cast<LPCWSTR>(addr), &mod) || !mod) {
+            return std::format("0x{:016X}", addr);
+        }
+        char path[MAX_PATH]{};
+        const char* name = GetModuleFileNameA(mod, path, MAX_PATH) != 0 ? BaseName(path) : "unknown";
+        return std::format("{}+0x{:X}", name, addr - reinterpret_cast<DWORD64>(mod));
+    }
+
+    // DescribeModule, plus " <symbol>+0x<disp> (<file>:<line>)" when dbghelp resolves it from the PDB.
+    std::string DescribeAddress(DWORD64 addr) {
+        std::string out = DescribeModule(addr);
+        alignas(SYMBOL_INFO) char buffer[sizeof(SYMBOL_INFO) + MAX_SYM_NAME]{};
+        auto* symbol = reinterpret_cast<SYMBOL_INFO*>(buffer);
+        symbol->SizeOfStruct = sizeof(SYMBOL_INFO);
+        symbol->MaxNameLen = MAX_SYM_NAME;
+        DWORD64 displacement = 0;
+        if (SymFromAddr(GetCurrentProcess(), addr, &displacement, symbol)) {
+            out += std::format(" {}+0x{:X}", symbol->Name, displacement);
+            IMAGEHLP_LINE64 line{};
+            line.SizeOfStruct = sizeof(line);
+            DWORD lineDisplacement = 0;
+            if (SymGetLineFromAddr64(GetCurrentProcess(), addr, &lineDisplacement, &line) && line.FileName) {
+                out += std::format(" ({}:{})", BaseName(line.FileName), line.LineNumber);
+            }
+        }
+        return out;
+    }
+
+    // The folder of this DLL, where the debug build's post-build step copies the PDB.
+    std::string PluginFolder() {
+        HMODULE self = nullptr;
+        constexpr DWORD kFlags = GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT;
+        char path[MAX_PATH]{};
+        if (!GetModuleHandleExW(kFlags, reinterpret_cast<LPCWSTR>(&PluginFolder), &self) ||
+            GetModuleFileNameA(self, path, MAX_PATH) == 0) {
+            return {};
+        }
+        std::string folder{path};
+        folder.resize(static_cast<std::size_t>(BaseName(path) - path));
+        return folder;
+    }
+
+    // Exception filter: logs once, and never handles the fault (always EXCEPTION_CONTINUE_SEARCH).
+    LONG ReportLoadFault(EXCEPTION_POINTERS* ep) {
+        if (g_loadFaultReported || !ep || !ep->ExceptionRecord || !ep->ContextRecord) {
+            return EXCEPTION_CONTINUE_SEARCH;
+        }
+        g_loadFaultReported = true;
+        const auto* record = ep->ExceptionRecord;
+        const DWORD code = record->ExceptionCode;
+        const auto faultAddr = reinterpret_cast<DWORD64>(record->ExceptionAddress);
+        MAGIC_DEBUG_LOG("[Startup] load fault: code=0x{:08X} ({}) at {}", code, FaultName(code),
+                        DescribeModule(faultAddr));
+        if (code == EXCEPTION_ACCESS_VIOLATION && record->NumberParameters >= 2) {
+            const ULONG_PTR kind = record->ExceptionInformation[0];
+            const char* access = kind == 0 ? "read" : kind == 1 ? "write" : kind == 8 ? "execute" : "unknown";
+            MAGIC_DEBUG_LOG("[Startup] load fault: access violation, {} at 0x{:016X}", access,
+                            static_cast<DWORD64>(record->ExceptionInformation[1]));
+        }
+        // A stack overflow leaves no stack for dbghelp: the first line is all that can be reported.
+        if (code == EXCEPTION_STACK_OVERFLOW) return EXCEPTION_CONTINUE_SEARCH;
+
+        const HANDLE process = GetCurrentProcess();
+        SymSetOptions(SYMOPT_UNDNAME | SYMOPT_DEFERRED_LOADS | SYMOPT_LOAD_LINES);
+        const std::string searchPath = PluginFolder();
+        // Another module may already own dbghelp for this process: then SymInitialize fails, its symbols may still
+        // resolve, and its state must not be torn down by SymCleanup.
+        const bool ownSymbols =
+            SymInitialize(process, searchPath.empty() ? nullptr : searchPath.c_str(), TRUE) != FALSE;
+        if (!ownSymbols) {
+            MAGIC_DEBUG_LOG("[Startup] load fault: SymInitialize failed (error {}), frames may lack symbols",
+                            GetLastError());
+        }
+
+        CONTEXT context = *ep->ContextRecord;
+        STACKFRAME64 frame{};
+        frame.AddrPC.Offset = context.Rip;
+        frame.AddrPC.Mode = AddrModeFlat;
+        frame.AddrStack.Offset = context.Rsp;
+        frame.AddrStack.Mode = AddrModeFlat;
+        frame.AddrFrame.Offset = context.Rbp;
+        frame.AddrFrame.Mode = AddrModeFlat;
+        for (int i = 0; i < kMaxFaultFrames; ++i) {
+            if (!StackWalk64(IMAGE_FILE_MACHINE_AMD64, process, GetCurrentThread(), &frame, &context, nullptr,
+                             SymFunctionTableAccess64, SymGetModuleBase64, nullptr) ||
+                frame.AddrPC.Offset == 0) {
+                break;
+            }
+            MAGIC_DEBUG_LOG("[Startup] load fault: frame {}: {}", i, DescribeAddress(frame.AddrPC.Offset));
+        }
+        if (ownSymbols) SymCleanup(process);
+        return EXCEPTION_CONTINUE_SEARCH;
+    }
+
+    // __try needs a function with no C++ objects to unwind (C2712). The handler never runs: the filter always
+    // returns EXCEPTION_CONTINUE_SEARCH, so SKSE handles the fault as it did before.
+    bool LoadPluginWithFaultReport(const SKSE::LoadInterface* skse) {
+        __try {
+            return LoadPlugin(skse);
+        } __except (ReportLoadFault(GetExceptionInformation())) {
+            return false;
+        }
+    }
+#endif
 }
 
 SKSE_PLUGIN_LOAD(const SKSE::LoadInterface* skse) {
-    SKSE::Init(skse, {.trampoline = true, .trampolineSize = IntegratedMagic::Hooks::kHookSpaceBytes});
-    InitializeLogger();
-    IntegratedMagic::StyleConfig::Get().Load();
-    if (const auto mi = SKSE::GetMessagingInterface()) {
-        mi->RegisterListener(GlobalMessageHandler);
-    }
-    IntegratedMagic::Hooks::Install_Hooks();
-    return true;
+#ifdef MAGIC_DEBUG_LOGGING
+    return LoadPluginWithFaultReport(skse);
+#else
+    return LoadPlugin(skse);
+#endif
 }

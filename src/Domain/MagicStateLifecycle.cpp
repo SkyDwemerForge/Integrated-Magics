@@ -52,7 +52,7 @@ namespace IntegratedMagic {
         auto* pc = const_cast<RE::PlayerCharacter*>(player);
         const auto ws = pc->AsActorState()->GetWeaponState();
         _session.wasHandsDown = (ws == RE::WEAPON_STATE::kSheathed);
-#ifdef DEBUG
+#ifdef MAGIC_DEBUG_LOGGING
         const bool snapHasSpells = (_restore.snapshot.rightSpell != nullptr || _restore.snapshot.leftSpell != nullptr);
 #endif
 
@@ -285,7 +285,7 @@ namespace IntegratedMagic {
         auto* pc = GetPlayer();
         if (!pc) return true;
         if (PlayerIsKnockedOrStaggered(pc) && (!_left.pressActive && !_right.pressActive)) return true;
-#ifdef DEBUG
+#ifdef MAGIC_DEBUG_LOGGING
         const auto ws = pc->AsActorState()->GetWeaponState();
 #endif
         const bool leftOnlyFromSheathed = _session.wasHandsDown && (_session.modeSpellRight == nullptr);

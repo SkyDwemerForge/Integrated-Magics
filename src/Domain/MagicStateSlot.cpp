@@ -89,7 +89,7 @@ namespace IntegratedMagic {
     void MagicState::EnterHand(Hand hand, const SpellSettings& ss, bool /*skipAnim*/) {
         using enum ActivationMode;
         auto& hm = ModeFor(hand);
-#ifdef DEBUG
+#ifdef MAGIC_DEBUG_LOGGING
         const char* handStr = IsLeft(hand) ? "Left" : "Right";
 #endif
         hm = {};
