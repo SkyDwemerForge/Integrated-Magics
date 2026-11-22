@@ -10,7 +10,11 @@
 
 namespace IntegratedMagic::MagicAction {
     namespace {
-        const RE::BSFixedString kInstantAnim("InstantEquipAnim");
+        // Built on first use, never at DLL load: see RightAttackEvent() in SyntheticInput.cpp (spec 010, research R7).
+        const RE::BSFixedString& InstantAnimVar() {
+            static const RE::BSFixedString name{"InstantEquipAnim"};
+            return name;
+        }
         inline std::atomic<std::uint64_t> g_skipToken{0};  // NOSONAR
 
         inline void SetCasterDual(RE::ActorMagicCaster* caster, bool dual) {
@@ -125,7 +129,7 @@ namespace IntegratedMagic::MagicAction {
         if (!pc) return;
         const std::uint64_t token = (g_skipToken.fetch_add(1, std::memory_order_relaxed) + 1) | 1uLL;
         g_skipToken.store(token, std::memory_order_relaxed);
-        (void)pc->SetGraphVariableBool(kInstantAnim, enable);
+        (void)pc->SetGraphVariableBool(InstantAnimVar(), enable);
         ScheduleDisableSkipEquip(token, 500);
     }
 
@@ -170,7 +174,7 @@ namespace IntegratedMagic::MagicAction {
             mgr->EquipShout(player, shout);
         } else if (auto* spell = shoutOrPower->As<RE::SpellItem>(); spell && IsPowerSpell(shoutOrPower)) {
             mgr->EquipSpell(player, spell, nullptr);
-            const auto& rd = player->GetActorRuntimeData();
+            [[maybe_unused]] const auto& rd = player->GetActorRuntimeData();
             MAGIC_DEBUG_LOG("[Action] EquipShoutInVoice: power {:#010x} -> selectedPower={:#010x}", spell->GetFormID(),
                             rd.selectedPower ? rd.selectedPower->GetFormID() : 0u);
         }

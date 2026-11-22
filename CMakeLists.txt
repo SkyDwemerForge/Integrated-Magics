@@ -35,6 +35,9 @@ target_include_directories(${PROJECT_NAME}
 
 target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_23)
 
+# Debug logging (MAGIC_DEBUG_LOG and the debug-only blocks) is compiled in for the Debug build only (spec 010).
+target_compile_definitions(${PROJECT_NAME} PRIVATE "$<$<CONFIG:Debug>:MAGIC_DEBUG_LOGGING>")
+
 find_package(imgui CONFIG REQUIRED)
 target_link_libraries(${PROJECT_NAME} PRIVATE imgui::imgui xinput.lib)
 

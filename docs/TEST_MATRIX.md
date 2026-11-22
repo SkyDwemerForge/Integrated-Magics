@@ -35,6 +35,8 @@ Bloqueante: se algum item falhar, o resto da matriz não pode ser executado. Ver
 - [ ] **0.3** Iniciar com o load order completo de plugins SKSE → mesmo resultado de 0.1 e 0.2
 - [ ] **0.4** Repetir 0.1–0.3 no SE e no AE
 - [x] **0.5** Primeira captura de hotkey no SKSE menu → `[Hooks] MenuInputShieldHook installed (outer, previous target in <módulo>)` uma única vez, sem `[Hooks]` de warn ou critical. `<módulo>` é o hook que estava por fora antes (no teste de validação, `InputManager.dll`, do mod Input Manager) (spec `specs/009-fix-capture-input-leak/`)
+- [ ] **0.6** Build **release** (compilada por último), sessão com início, carregar save, abrir o SKSE menu e lançar um slot → toda linha `info` do `IntegratedMagic.log` é uma das 13 linhas sempre ativas de `specs/010-fix-debug-build-define/contracts/build-switch.md` §3; warnings e erros só se algo falhou; nenhuma linha `[Input]`, `[State]`, `[FLOW]`, `[SpellSystem]`, `[UI]`, `[SaveLoad]` ou `[Startup]` (spec `specs/010-fix-debug-build-define/`)
+- [x] **0.7** Build **debug** (compilada por último), 3 inícios → `skse64.log` carrega `IntegratedMagic` sem erro; o log tem `[Startup] Install_Hooks (game module base=0x...)` com base diferente de 0, as seis linhas `[Hooks] ... installed`, a linha `hook space` e linhas de debug como `[Input]`, e nenhuma linha `[Startup] load fault:` (spec `specs/010-fix-debug-build-define/`)
 
 ---
 

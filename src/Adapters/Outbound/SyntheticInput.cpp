@@ -7,12 +7,25 @@
 #include "Shared/Hand.h"
 
 namespace IntegratedMagic::detail {
-    static const RE::BSFixedString kRightAttackEvent{"Right Attack/Block"};
-    static const RE::BSFixedString kLeftAttackEvent{"Left Attack/Block"};
-    static const RE::BSFixedString kShoutUserEvent{"Shout"};
+    // Game strings are built on first use, never at DLL load. A BSFixedString built during static initialization
+    // resolves a game address before CommonLib's REL::Module instance is constructed, and in Debug builds that
+    // construction then wipes the module base, so every later hook address is wrong (spec 010, research R7).
+    const RE::BSFixedString& RightAttackEvent() {
+        static const RE::BSFixedString name{"Right Attack/Block"};
+        return name;
+    }
 
-    const RE::BSFixedString& RightAttackEvent() { return kRightAttackEvent; }
-    const RE::BSFixedString& LeftAttackEvent() { return kLeftAttackEvent; }
+    const RE::BSFixedString& LeftAttackEvent() {
+        static const RE::BSFixedString name{"Left Attack/Block"};
+        return name;
+    }
+
+    namespace {
+        const RE::BSFixedString& ShoutUserEvent() {
+            static const RE::BSFixedString name{"Shout"};
+            return name;
+        }
+    }
 
     enum class DirectKind : std::uint8_t { AttackLeft, AttackRight, Shout };
 
@@ -75,16 +88,16 @@ namespace IntegratedMagic::detail {
             return;
         }
 
-        auto* ev = RE::ButtonEvent::Create(RE::INPUT_DEVICE::kKeyboard, kShoutUserEvent, 0, value, heldSecs);
+        auto* ev = RE::ButtonEvent::Create(RE::INPUT_DEVICE::kKeyboard, ShoutUserEvent(), 0, value, heldSecs);
         if (!ev) return;
         ev->next = nullptr;
 
         const bool canProcess = pc->shoutHandler->CanProcess(ev);
         if (value == 0.0f) {
             auto* player = RE::PlayerCharacter::GetSingleton();
-            const RE::FormID selPower = (player && player->GetActorRuntimeData().selectedPower)
-                                            ? player->GetActorRuntimeData().selectedPower->GetFormID()
-                                            : 0u;
+            [[maybe_unused]] const RE::FormID selPower = (player && player->GetActorRuntimeData().selectedPower)
+                                                             ? player->GetActorRuntimeData().selectedPower->GetFormID()
+                                                             : 0u;
             MAGIC_DEBUG_LOG("[SyntheticInput] FireShoutDirect: stopShout held={:.3f} canProcess={} selectedPower={:#010x}",
                             heldSecs, canProcess, selPower);
         }

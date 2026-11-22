@@ -102,7 +102,7 @@ namespace IntegratedMagic {
 
     bool MagicState::RequestAutoAttackStart(Hand hand, bool /*clearWaitAfterEquip*/) {
         auto& hm = ModeFor(hand);
-#ifdef DEBUG
+#ifdef MAGIC_DEBUG_LOGGING
         const char* handStr = IsLeft(hand) ? "Left" : "Right";
 #endif
 
@@ -385,7 +385,7 @@ namespace IntegratedMagic {
         const auto castStateEnum = caster->state.get();
         const auto casterState = std::to_underlying(castStateEnum);
 
-#ifdef DEBUG
+#ifdef MAGIC_DEBUG_LOGGING
         const char* handStr = IsLeft(hand) ? "Left" : "Right";
         static float s_lastPumpLog[2] = {-2.f, -2.f};
         const int hi = IsLeft(hand) ? 0 : 1;
@@ -948,7 +948,7 @@ namespace IntegratedMagic {
 
     void MagicState::OnCasterStartCast(Hand hand, const RE::MagicItem* spell,
                                        RE::MagicSystem::CastingType
-#ifdef DEBUG
+#ifdef MAGIC_DEBUG_LOGGING
                                            type
 #endif
     ) {
@@ -972,7 +972,7 @@ namespace IntegratedMagic {
 
     CastInterruptResult MagicState::OnCasterInterrupt(Hand hand, const RE::MagicItem* spell,
                                                       bool
-#ifdef DEBUG
+#ifdef MAGIC_DEBUG_LOGGING
                                                           depleteEnergy
 #endif
     ) {

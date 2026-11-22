@@ -40,7 +40,7 @@ namespace Application {
             const auto aaResult = IntegratedMagic::MagicState::Get().PumpAutoAttack(dt);
 
             if (aaResult.leftAttack) {
-#ifdef DEBUG
+#ifdef MAGIC_DEBUG_LOGGING
                 static float s_lastLeftDispatchLog = -2.f;
                 const float leftHeld = aaResult.leftAttack->secsHeld;
                 if ((leftHeld < s_lastLeftDispatchLog) || (leftHeld - s_lastLeftDispatchLog >= 1.0f)) {
@@ -53,7 +53,7 @@ namespace Application {
                                                         aaResult.leftAttack->secsHeld);
             }
             if (aaResult.rightAttack) {
-#ifdef DEBUG
+#ifdef MAGIC_DEBUG_LOGGING
                 static float s_lastRightDispatchLog = -2.f;
                 const float rightHeld = aaResult.rightAttack->secsHeld;
                 if ((rightHeld < s_lastRightDispatchLog) || (rightHeld - s_lastRightDispatchLog >= 1.0f)) {

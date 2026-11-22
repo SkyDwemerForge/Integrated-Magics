@@ -418,12 +418,24 @@ Max slots: `IntegratedMagic::Config::kMaxSlots = 64` (`include/Config/Limits.h`)
 | Save/load slot assignments | `include/Persistence/SaveSpellDB.h`, `src/Persistence/SaveSpellDB.cpp` |
 | Global spell settings (mode, auto-attack) | `include/Persistence/SpellSettingsDB.h` |
 | Slot fails with weapons drawn and a weapon or shield in a hand (draw restarts, `cast did not start`) | `src/Domain/MagicStatePump.cpp` (`PumpCastPhase` equip-animation pause, `PumpAutomatic` retry bound), `include/Shared/HandDiagnostics.h`. Check the `Activation hands:` / `Press hands:` lines first (`eq=1/0` = the game's equip animation is playing). See `specs/007-fix-drawn-weapon-cast/` |
+| The debug build fails to load (`fatal error occurred while loading plugin`), or another start-up fault | `src/plugin.cpp` (`LoadPlugin`, the load fault report), `src/Hooks.cpp`. Check the last `[Startup]` / `[Hooks] installing` line and the `[Startup] load fault:` lines first. A `game module base=0x0` means a static object reached the game at DLL load. See `specs/010-fix-debug-build-define/` (research R7) |
 
 ---
 
 ## Debug logging
 
-Enabled only in DEBUG builds. Macro: `MAGIC_DEBUG_LOG(fmt, ...)`. Output: `IntegratedMagic.log` in SKSE's log folder (`SKSE::log::log_directory()`, i.e. `Documents\My Games\Skyrim Special Edition\SKSE`). It is written line by line and emptied at each game launch.
+Macro: `MAGIC_DEBUG_LOG(fmt, ...)`. Output: `IntegratedMagic.log` in SKSE's log folder (`SKSE::log::log_directory()`, i.e. `Documents\My Games\Skyrim Special Edition\SKSE`). It is written line by line and emptied at each game launch.
+
+**Which build has it** (spec 010):
+- **The switch**: `CMakeLists.txt` defines `MAGIC_DEBUG_LOGGING` for the `Debug` configuration only (`target_compile_definitions`, `PRIVATE`). So the `debug` preset writes the debug lines, and the `release` preset compiles them out: no calls and no format strings in the DLL.
+- **Never a source edit**: debug-only code tests `#ifdef MAGIC_DEBUG_LOGGING`. `DEBUG` is not the switch any more, and `include/PCH.h` stops the build with `#error` if it is defined.
+- **Values used only by debug logs**: mark them `[[maybe_unused]]`, or the release build warns (C4189 / C4100) when the logs are compiled out. Both presets must build with 0 warnings.
+- **Always-on lines**: direct `spdlog::info` / `warn` / `error` calls are written in every build. The list is in `specs/010-fix-debug-build-define/contracts/build-switch.md` §3.
+- **Validation**: specs are validated in game on the debug build, built last so its DLL is the one installed (each build copies its DLL to the MO2 mod folder). Build release last to play or to publish.
+
+**Start-up diagnostics** (debug build only; `specs/010-fix-debug-build-define/contracts/load-fault-report.md`):
+- **Breadcrumbs**: `[Startup] StyleConfig::Load`, `RegisterListener`, `Install_Hooks (game module base=0x<hex>)` and `SKSEPluginLoad done`, plus `[Hooks] installing <Name>` before each hook.
+- **The load fault report**: an exception filter around `SKSEPluginLoad`. It logs `[Startup] load fault: code=... at <module>+0x<rva>`, the access type and target of an access violation, and up to 24 frames with symbols from the PDB the debug build copies next to the DLL. Then it lets SKSE handle the fault as before.
 
 Key prefixes in logs:
 - `[FLOW]` — high-level cast flow events
@@ -446,4 +458,5 @@ Key prefixes in logs:
 - When `_session.active = true`, `_session.activeSlot >= 0` is always true.
 - `RestoreContext` is only valid while `_session.active`. Cleared by `ResetSessionState()`.
 - Never call `MagicState::OnSlotPressed` while `_inSlotSetup = true` (re-entrant guard).
+- No namespace-scope or static-member object may call into the game at DLL load: no `RE::BSFixedString`, `REL::Relocation` or `GetSingleton()` in a global initializer. Use a function-local static, which is built on first use. In Debug, CommonLib's `REL::Module::_instance` is constructed after the plugin's static objects, and that resets the module base to 0 for every later address (spec 010, research R7).
 - In dual-cast mode (`_session.isDualCasting`), both hands must always restart DOWN together. Any UP dispatched for one hand must be paired with an UP for the other in the same frame so both go DOWN on the next frame — otherwise the game's behavior machine exits dual-cast and fires individual casts.

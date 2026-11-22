@@ -83,7 +83,7 @@ namespace IntegratedMagic::CaptureGuard {
             ClaimKeys();
         }
 
-        void TurnOff(Clock::time_point now, [[maybe_unused]] const char* why) {
+        void TurnOff([[maybe_unused]] Clock::time_point now, [[maybe_unused]] const char* why) {
             // Nothing to restore for the keys: once no longer claimed, an unheld key loses its owner at the next
             // NewFrame. The outer hook stops hiding the input as soon as `on` is false.
             SKSEMenuFramework::SetHotkeyEnabled(g_guard.savedHotkeyEnabled);
